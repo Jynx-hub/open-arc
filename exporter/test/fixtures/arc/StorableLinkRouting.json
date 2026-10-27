@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "defaultDestination": { "littleArc": { "_0": { "mostRecent": {} } } },
+  "rules": [
+    { "id": "R1", "destination": { "space": { "_0": "SPACE-HOME" } },
+      "sourceComponents": [{ "id": "C1", "componentType": { "urlMatch": { "_0": { "contains": {} }, "_1": "music.example.com" } } }] }
+  ]
+}

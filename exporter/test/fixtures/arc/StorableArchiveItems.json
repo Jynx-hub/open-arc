@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "items": [
+    "ARCH-1", { "archivedAt": 700001000, "reason": "auto", "source": { "space": { "_0": "SPACE-WORK" } },
+      "sidebarItem": { "id": "OLD-1", "parentID": "WORK-TODAY", "childrenIds": [], "title": null, "createdAt": 700000000, "isUnread": false, "originatingDevice": null, "data": { "tab": { "savedURL": "https://old.example.com/", "savedTitle": "Old, \"quoted\" tab" } } } },
+    "ARCH-2", { "archivedAt": 700002000, "reason": "manual", "source": { "littleArc": {} },
+      "sidebarItem": { "id": "OLD-2", "parentID": null, "childrenIds": [], "title": null, "createdAt": 700000000, "isUnread": false, "originatingDevice": null, "data": { "tab": { "savedURL": "https://quick.example.com/", "savedTitle": "Quick lookup" } } } }
+  ]
+}

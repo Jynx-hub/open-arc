@@ -1,0 +1,36 @@
+{
+  "name": "arc-export",
+  "version": "0.1.0",
+  "description": "Export your Arc browser Spaces, pinned tabs, Favorites and Archive to bookmarks, Markdown, JSON and CSV. Local-only, zero dependencies.",
+  "type": "module",
+  "bin": {
+    "arc-export": "bin/arc-export.js"
+  },
+  "files": [
+    "bin",
+    "src"
+  ],
+  "engines": {
+    "node": ">=18.3"
+  },
+  "scripts": {
+    "test": "node --test"
+  },
+  "keywords": [
+    "arc",
+    "arc-browser",
+    "export",
+    "bookmarks",
+    "migration"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Jynx-hub/open-arc.git",
+    "directory": "exporter"
+  },
+  "homepage": "https://github.com/Jynx-hub/open-arc/tree/main/exporter#readme",
+  "bugs": {
+    "url": "https://github.com/Jynx-hub/open-arc/issues"
+  }
+}
