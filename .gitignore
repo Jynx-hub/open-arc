@@ -1,0 +1,8 @@
+node_modules/
+.DS_Store
+# never commit analysis output or real user data
+*.rea
+*evidence*
+data-copy/
+# local session notes (private analysis paths)
+.claude/
