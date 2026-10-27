@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-arc.dev/spec/formats/link-routing.schema.json",
+  "title": "Arc StorableLinkRouting.json",
+  "type": "object",
+  "required": ["version", "rules"],
+  "properties": {
+    "version": { "type": "integer" },
+    "defaultDestination": { "$ref": "#/$defs/Destination" },
+    "rules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "destination", "sourceComponents"],
+        "properties": {
+          "id": { "type": "string" },
+          "destination": { "$ref": "#/$defs/Destination" },
+          "sourceComponents": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["componentType"],
+              "properties": { "id": { "type": "string" }, "componentType": { "type": "object", "minProperties": 1, "maxProperties": 1 } }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "Destination": {
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 1,
+      "propertyNames": { "enum": ["space", "littleArc"] }
+    }
+  }
+}

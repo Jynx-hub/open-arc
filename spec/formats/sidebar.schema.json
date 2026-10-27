@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-arc.dev/spec/formats/sidebar.schema.json",
+  "title": "Arc StorableSidebar.json",
+  "type": "object",
+  "required": ["version", "sidebar"],
+  "properties": {
+    "version": { "type": "integer" },
+    "sidebar": {
+      "type": "object",
+      "required": ["containers"],
+      "properties": {
+        "containers": {
+          "type": "array",
+          "description": "Keyed array: ContainerKey, DataContainer, ContainerKey, DataContainer, …",
+          "items": {
+            "anyOf": [
+              { "$ref": "#/$defs/ContainerKey" },
+              { "$ref": "#/$defs/DataContainer" }
+            ]
+          }
+        }
+      }
+    },
+    "sidebarSyncState": { "type": "object" },
+    "firebaseSyncState": { "type": "object" }
+  },
+  "$defs": {
+    "ID": { "type": "string", "minLength": 1 },
+    "AppleTime": { "type": "number", "description": "Seconds since 2001-01-01T00:00:00Z" },
+    "Profile": {
+      "description": "Enum: {\"default\": {}} (older files use true) or a custom profile.",
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 1
+    },
+    "ContainerKey": {
+      "description": "{\"global\": {}} for the main window sidebar; {\"littleBrowser\": {\"_0\": \"<id>\"}} for a Little Arc window; {\"standalone\": {\"_0\": \"<id>\"}} for a standalone-sidebar window; incognito for private windows.",
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 1,
+      "propertyNames": { "enum": ["global", "littleBrowser", "standalone", "incognito"] }
+    },
+    "DataContainer": {
+      "type": "object",
+      "required": ["spaces", "items"],
+      "properties": {
+        "spaces": { "type": "array", "items": { "anyOf": [{ "$ref": "#/$defs/ID" }, { "$ref": "#/$defs/Space" }] } },
+        "items": { "type": "array", "items": { "anyOf": [{ "$ref": "#/$defs/ID" }, { "$ref": "#/$defs/SidebarItem" }] } },
+        "topAppsContainerIDs": { "type": "array", "items": { "anyOf": [{ "$ref": "#/$defs/ID" }, { "$ref": "#/$defs/Profile" }] } }
+      }
+    },
+    "Space": {
+      "type": "object",
+      "required": ["id", "containerIDs"],
+      "properties": {
+        "id": { "$ref": "#/$defs/ID" },
+        "title": { "type": ["string", "null"] },
+        "profile": { "$ref": "#/$defs/Profile" },
+        "containerIDs": { "type": "array", "items": { "type": "string" } },
+        "newContainerIDs": { "type": "array", "items": { "anyOf": [{ "type": "string" }, { "type": "object" }] } },
+        "customInfo": {
+          "type": "object",
+          "properties": {
+            "iconType": { "type": "object" },
+            "windowTheme": { "type": "object" }
+          }
+        }
+      }
+    },
+    "SidebarItem": {
+      "type": "object",
+      "required": ["id", "data", "childrenIds"],
+      "properties": {
+        "id": { "$ref": "#/$defs/ID" },
+        "parentID": { "type": ["string", "null"] },
+        "childrenIds": { "type": "array", "items": { "$ref": "#/$defs/ID" } },
+        "title": { "type": ["string", "null"] },
+        "createdAt": { "$ref": "#/$defs/AppleTime" },
+        "isUnread": { "type": "boolean" },
+        "originatingDevice": { "type": ["string", "null"] },
+        "data": { "$ref": "#/$defs/SidebarItemData" }
+      }
+    },
+    "SidebarItemData": {
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 1,
+      "propertyNames": {
+        "enum": ["tab", "list", "arcDocument", "easel", "itemContainer", "welcomeToArc", "splitView",
+                 "sharedObject", "instantLinks", "tabGroup", "archiveContent", "download", "arcSearch"]
+      },
+      "properties": {
+        "tab": {
+          "type": "object",
+          "properties": {
+            "savedURL": { "type": "string" },
+            "savedTitle": { "type": ["string", "null"] },
+            "timeLastActiveAt": { "$ref": "#/$defs/AppleTime" },
+            "savedMuteStatus": { "type": "string" },
+            "referrerID": { "type": ["string", "null"] },
+            "activeTabBeforeCreationID": { "type": ["string", "null"] }
+          }
+        },
+        "itemContainer": {
+          "type": "object",
+          "required": ["containerType"],
+          "properties": {
+            "containerType": {
+              "type": "object",
+              "minProperties": 1,
+              "maxProperties": 1,
+              "propertyNames": { "enum": ["spaceItems", "topApps"] }
+            }
+          }
+        },
+        "list": { "type": "object" },
+        "tabGroup": { "type": "object", "properties": { "title": { "type": ["string", "null"] } } }
+      }
+    }
+  }
+}

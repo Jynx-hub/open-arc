@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-arc.dev/spec/formats/archive.schema.json",
+  "title": "Arc StorableArchiveItems.json",
+  "type": "object",
+  "required": ["version", "items"],
+  "properties": {
+    "version": { "type": "integer" },
+    "items": {
+      "type": "array",
+      "items": { "anyOf": [{ "type": "string" }, { "$ref": "#/$defs/ArchiveEntry" }] }
+    }
+  },
+  "$defs": {
+    "ArchiveEntry": {
+      "type": "object",
+      "required": ["archivedAt", "reason", "sidebarItem"],
+      "properties": {
+        "archivedAt": { "type": "number" },
+        "reason": { "enum": ["auto", "manual", "clearButton", "clearTabGroup"] },
+        "source": {
+          "type": "object",
+          "minProperties": 1,
+          "maxProperties": 1,
+          "propertyNames": { "enum": ["space", "littleArc", "standaloneSidebar", "unknown"] }
+        },
+        "sidebarItem": { "$ref": "sidebar.schema.json#/$defs/SidebarItem" }
+      }
+    }
+  }
+}
