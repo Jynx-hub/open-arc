@@ -4,6 +4,12 @@ import type { State } from '../shared/model';
 import { rootOf } from '../shared/tree';
 
 const configured = new Set<string>();
+let setup: ((ses: Session, profileId: string) => void) | null = null;
+
+/** Per-session wiring that needs the app's services (downloads, permissions). Set once, before any window opens. */
+export function setSessionSetup(fn: (ses: Session, profileId: string) => void) {
+  setup = fn;
+}
 
 export function partitionFor(profileId: string): string {
   return `persist:profile-${profileId}`;
@@ -16,6 +22,7 @@ export function sessionFor(profileId: string): Session {
     configured.add(partition);
     // Some sites refuse unfamiliar browsers; present a plain Chrome user agent.
     ses.setUserAgent(ses.getUserAgent().replace(/\s(Electron|open-arc-browser)\/\S+/g, ''));
+    setup?.(ses, profileId);
   }
   return ses;
 }

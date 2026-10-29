@@ -3,6 +3,8 @@ import type { LiveTab, WindowInfo } from '../../shared/ipc';
 import { itemTitle, type Item, type Space, type State } from '../../shared/model';
 import { isAncestor } from '../../shared/tree';
 import { api, dispatch, faviconFor, hostOf } from '../api';
+import { originOf } from '../../shared/permissions';
+import { DownloadsList, PermissionPromptCard, SitePermissionList, downloadProgress, useDownloads } from './Site';
 
 const DRAG_TYPE = 'application/x-openarc-item';
 
@@ -27,6 +29,8 @@ export function Sidebar(p: Props) {
   const todayRoot = state.items[space.todayRootId];
   const selected = win.selectedId ? p.live[win.selectedId] : undefined;
   const swipe = useRef({ dx: 0, at: 0 });
+  const [panel, setPanel] = useState<'site' | 'downloads' | null>(null);
+  const origin = selected ? originOf(selected.url) : null;
 
   // Two-finger horizontal swipe switches Spaces.
   const onWheel = (e: React.WheelEvent) => {
@@ -56,10 +60,22 @@ export function Sidebar(p: Props) {
         </button>
       </div>
 
-      <button className="url-pill" onClick={() => p.openCommandBar('current')} title={selected?.url}>
-        {selected ? hostOf(selected.url) : 'Search or enter address'}
-        {win.zoom !== 1 && <span className="zoom-badge">{Math.round(win.zoom * 100)}%</span>}
-      </button>
+      <div className="url-row">
+        <button className="url-pill" onClick={() => p.openCommandBar('current')} title={selected?.url}>
+          {selected ? hostOf(selected.url) : 'Search or enter address'}
+          {win.zoom !== 1 && <span className="zoom-badge">{Math.round(win.zoom * 100)}%</span>}
+          {!!selected?.capturing?.length && <span className="capture-dot" title={`Using your ${selected.capturing.join(' and ')}`}>●</span>}
+        </button>
+        <button className={`icon-btn site-btn ${panel === 'site' ? 'on' : ''}`} title="Site settings" disabled={!origin} onClick={() => setPanel(panel === 'site' ? null : 'site')}>⚙︎</button>
+      </div>
+
+      {win.permissionPrompt && <PermissionPromptCard prompt={win.permissionPrompt} />}
+      {panel === 'site' && origin && (
+        <div className="sidebar-panel site-panel">
+          <header><span className="ellipsis">{hostOf(origin)}</span><button className="icon-btn" onClick={() => setPanel(null)}>×</button></header>
+          <SitePermissionList state={state} origin={origin} />
+        </div>
+      )}
 
       {favRoot && (
         <FavoritesGrid state={state} root={favRoot} win={win} live={p.live} />
@@ -104,7 +120,18 @@ export function Sidebar(p: Props) {
 
       {p.children}
 
-      <SpaceBar state={state} space={space} openOverlay={p.openOverlay} />
+      {panel === 'downloads' && (
+        <div className="sidebar-panel downloads-panel">
+          <header>
+            <span>Downloads</span>
+            <button className="link" onClick={() => { setPanel(null); p.openOverlay('downloads'); }}>Show all</button>
+            <button className="icon-btn" onClick={() => setPanel(null)}>×</button>
+          </header>
+          <DownloadsList state={state} limit={6} />
+        </div>
+      )}
+
+      <SpaceBar state={state} space={space} openOverlay={p.openOverlay} downloadsOpen={panel === 'downloads'} toggleDownloads={() => setPanel(panel === 'downloads' ? null : 'downloads')} />
     </aside>
   );
 }
@@ -309,11 +336,16 @@ export function Favicon({ url, known, size }: { url: string; known?: string | nu
   );
 }
 
-function SpaceBar({ state, space, openOverlay }: { state: State; space: Space; openOverlay(name: string, arg?: string): void }) {
+function SpaceBar({ state, space, openOverlay, downloadsOpen, toggleDownloads }: { state: State; space: Space; openOverlay(name: string, arg?: string): void; downloadsOpen: boolean; toggleDownloads(): void }) {
   const [over, setOver] = useState<string | null>(null);
+  const progress = downloadProgress(useDownloads(state));
   return (
     <div className="space-bar">
       <button className="icon-btn" title="Library" onClick={() => openOverlay('library')}>▤</button>
+      <button className={`icon-btn downloads-btn ${downloadsOpen ? 'on' : ''} ${progress !== null ? 'active' : ''}`} title="Downloads" onClick={toggleDownloads}>
+        {progress !== null && <ProgressRing value={progress} />}
+        <span>↓</span>
+      </button>
       <div className="space-dots">
         {state.spaces.map((s, i) => (
           <button
@@ -338,6 +370,17 @@ function SpaceBar({ state, space, openOverlay }: { state: State; space: Space; o
       </div>
       <button className="icon-btn" title="New Space" onClick={() => openOverlay('editSpace')}>+</button>
     </div>
+  );
+}
+
+function ProgressRing({ value }: { value: number }) {
+  const r = 11;
+  const c = 2 * Math.PI * r;
+  return (
+    <svg className="progress-ring" viewBox="0 0 26 26" aria-hidden>
+      <circle cx="13" cy="13" r={r} className="track" />
+      <circle cx="13" cy="13" r={r} className="fill" strokeDasharray={c} strokeDashoffset={c * (1 - value)} />
+    </svg>
   );
 }
 

@@ -54,6 +54,7 @@ export async function importFromArc(store: Store, dir?: string, firestoreDir?: s
   state.boosts = [...prev.boosts.filter((b) => !b.id.startsWith('arc-')), ...state.boosts];
   state.history = historyFromRows([...arcHistory, ...prev.history], HISTORY_LIMIT);
   summary.history = state.history.length;
+  state.downloads = prev.downloads;
   state.settings = { ...prev.settings, autoArchive: { ...state.settings.autoArchive, ...prev.settings.autoArchive } };
   store.dispatch({ type: 'state.replace', state });
   return summary;

@@ -1,15 +1,18 @@
 // The only way state changes. Pure: ids and timestamps come in on the action, so tests are deterministic.
 import {
   DEFAULT_PROFILE_ID,
+  DOWNLOADS_LIMIT,
   STATE_VERSION,
   defaultSettings,
   type ArchiveEntry,
   type ArchiveReason,
   type ArchiveSource,
   type Boost,
+  type DownloadEntry,
   type EaselScene,
   type Item,
   type LinkRule,
+  type PermissionDecision,
   type Settings,
   type Space,
   type SplitOrientation,
@@ -54,6 +57,11 @@ export type Action =
   | { type: 'archive.delete'; entryId: string }
   | { type: 'archive.clear' }
   | { type: 'settings.update'; patch: Partial<Settings> }
+  /** `decision: null` forgets the saved answer, so the site asks again. */
+  | { type: 'sitePermission.set'; origin: string; permission: string; decision: PermissionDecision | null }
+  | { type: 'download.upsert'; entry: DownloadEntry }
+  | { type: 'download.remove'; id: string }
+  | { type: 'download.clear' }
   | { type: 'linkRule.upsert'; rule: LinkRule }
   | { type: 'linkRule.remove'; id: string }
   | { type: 'linkRule.move'; id: string; index: number }
@@ -77,6 +85,7 @@ export function initialState(now: number, ids: { space: string; pinned: string; 
     settings: defaultSettings(),
     ranking: { picks: {}, visits: {} },
     history: [],
+    downloads: [],
   };
   state.items[ids.favorites] = rootItem(ids.favorites, now, { kind: 'favorites', profileId: DEFAULT_PROFILE_ID });
   state.favorites[DEFAULT_PROFILE_ID] = ids.favorites;
@@ -90,7 +99,8 @@ function touches(a: Action): (keyof State)[] {
   switch (a.type) {
     case 'history.visit': return ['history'];
     case 'ranking.pick': return ['ranking'];
-    case 'settings.update': return ['settings'];
+    case 'settings.update': case 'sitePermission.set': return ['settings'];
+    case 'download.upsert': case 'download.remove': case 'download.clear': return ['downloads'];
     case 'linkRule.upsert': case 'linkRule.remove': case 'linkRule.move': return ['linkRules'];
     case 'boost.upsert': case 'boost.remove': return ['boosts'];
     case 'archive.delete': case 'archive.clear': return ['archive'];
@@ -351,6 +361,32 @@ function apply(s: State, a: Action): void {
 
     case 'settings.update':
       Object.assign(s.settings, a.patch);
+      return;
+    case 'sitePermission.set': {
+      const site = { ...s.settings.sitePermissions[a.origin] };
+      if (a.decision) site[a.permission] = a.decision;
+      else delete site[a.permission];
+      if (Object.keys(site).length) s.settings.sitePermissions[a.origin] = site;
+      else delete s.settings.sitePermissions[a.origin];
+      return;
+    }
+    case 'download.upsert': {
+      const i = s.downloads.findIndex((d) => d.id === a.entry.id);
+      if (i >= 0) s.downloads[i] = a.entry;
+      else {
+        s.downloads.unshift(a.entry);
+        // Over the cap, the oldest finished entries go first; a running download is never dropped.
+        for (let j = s.downloads.length - 1; j >= 0 && s.downloads.length > DOWNLOADS_LIMIT; j--) {
+          if (s.downloads[j]!.state !== 'progressing') s.downloads.splice(j, 1);
+        }
+      }
+      return;
+    }
+    case 'download.remove':
+      s.downloads = s.downloads.filter((d) => d.id !== a.id);
+      return;
+    case 'download.clear':
+      s.downloads = s.downloads.filter((d) => d.state === 'progressing');
       return;
     case 'linkRule.upsert': {
       const i = s.linkRules.findIndex((r) => r.id === a.rule.id);

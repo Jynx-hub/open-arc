@@ -1,19 +1,22 @@
 // Window controller: which Space and tab each window shows, how live views are laid out, and every
 // command the UI or a shortcut can run.
-import { BrowserWindow, ClipboardItem, Menu, WebContentsView, app, clipboard, dialog, shell, type MenuItemConstructorOptions, type WebContents } from 'electron';
+import { BrowserWindow, ClipboardItem, Menu, WebContentsView, app, clipboard, dialog, shell, type ContextMenuParams, type MenuItemConstructorOptions, type WebContents } from 'electron';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { Command, ContextTarget, Rect, Snapshot, UiEvents, WindowInfo } from '../shared/ipc';
-import { itemTitle, type Item, type State } from '../shared/model';
+import { itemTitle, type Item, type Space, type State } from '../shared/model';
 import type { Action } from '../shared/reducer';
 import { isPersistent, rootOf, sectionOf, spaceOf, subtree } from '../shared/tree';
 import { KEY_ACTIONS, acceleratorFor } from '../shared/keymap';
-import { clearProfileData, sessionFor } from './profiles';
+import { clearProfileData, sessionFor, setSessionSetup } from './profiles';
 import type { Store } from './store';
 import { TabViews } from './tabs';
 import { search } from '../shared/search';
 import { applyBoosts, exportBoostCss } from './boosts';
 import { routeExternalUrl } from '../shared/routing';
+import { contextMenuTemplate, searchURL, type PageMenuEntry } from '../shared/contextMenu';
+import { Downloads } from './downloads';
+import { Permissions } from './permissions';
 
 const SPLIT_GAP = 6;
 const PEEK_INSET = 48;
@@ -44,16 +47,39 @@ interface Win {
 
 export class Browser {
   readonly tabs: TabViews;
+  readonly downloads: Downloads;
+  readonly permissions: Permissions;
   private wins = new Map<number, Win>();
   private lastFocused: number | null = null;
   private liveTimer: NodeJS.Timeout | null = null;
+  private progressTimer: NodeJS.Timeout | null = null;
 
   constructor(private store: Store, private rendererURL: string) {
     this.tabs = new TabViews(store, {
       openFrom: (itemId, url, disposition) => this.openFromPage(itemId, url, disposition),
       willNavigate: (itemId, url, wc) => this.maybePeek(itemId, url, wc),
       domReady: (_itemId, wc) => applyBoosts(this.store.state, wc),
+      contextMenu: (itemId, wc, params) => this.pageContextMenu(wc, params, itemId),
       liveChanged: () => this.scheduleLive(),
+    });
+    this.downloads = new Downloads(store, {
+      completed: (entry) => {
+        const w = this.focused();
+        if (w) this.toast(w, `Downloaded ${entry.filename}`, 'Show', { type: 'download', op: 'show', id: entry.id });
+      },
+      progress: () => this.scheduleProgress(),
+    });
+    this.permissions = new Permissions(store, {
+      changed: () => this.wins.forEach((w) => this.pushWindow(w)),
+      capturing: (wc, keys) => {
+        const id = this.tabs.itemFor(wc);
+        if (id) this.tabs.setCapturing(id, keys);
+      },
+    });
+    setSessionSetup((ses, profileId) => {
+      ses.on('will-download', (_e, item) => this.downloads.track(item, profileId));
+      ses.setPermissionRequestHandler((wc, permission, callback, details) => this.permissions.request(wc, permission, callback, details));
+      ses.setPermissionCheckHandler((_wc, permission, origin, details) => this.permissions.check(permission, origin, details));
     });
     store.subscribe((state, prev) => this.onState(state, prev));
   }
@@ -91,6 +117,7 @@ export class Browser {
       w.little = view;
       view.webContents.on('page-title-updated', () => this.pushWindow(w));
       view.webContents.on('did-navigate', () => this.pushWindow(w));
+      view.webContents.on('context-menu', (_e, params) => this.pageContextMenu(view.webContents, params, null));
       view.webContents.setWindowOpenHandler(({ url }) => {
         void view.webContents.loadURL(url);
         return { action: 'deny' };
@@ -128,6 +155,8 @@ export class Browser {
       peek: peekWc ? { url: peekWc.getURL(), title: peekWc.getTitle() } : null,
       little: littleWc ? { url: littleWc.getURL(), title: littleWc.getTitle() } : null,
       zoom: selectedView ? selectedView.webContents.getZoomFactor() : 1,
+      // The focused page first, then the other Split View panes, so no visible page waits on a hidden prompt.
+      permissionPrompt: this.permissions.promptFor([this.activeContents(w), ...w.attached.map((v) => v.webContents)].filter((x): x is WebContents => !!x)),
     };
   }
 
@@ -441,6 +470,7 @@ export class Browser {
     const view = new WebContentsView({ webPreferences: { session: sessionFor(profileId), sandbox: true } });
     view.setBorderRadius(10);
     view.webContents.on('page-title-updated', () => this.pushWindow(w));
+    view.webContents.on('context-menu', (_e, params) => this.pageContextMenu(view.webContents, params, null));
     view.webContents.setWindowOpenHandler(({ url: u }) => {
       void view.webContents.loadURL(u);
       return { action: 'deny' };
@@ -489,10 +519,22 @@ export class Browser {
       return;
     }
     // New tabs from a page open in Today, at the top. Background dispositions don't steal focus.
+    const id = this.backgroundTab(space, url);
+    if (disposition !== 'background-tab') this.select(w, id);
+  }
+
+  /** A new Today tab that loads without being selected. */
+  private backgroundTab(space: Space, url: string): string {
     const id = randomUUID();
     this.store.dispatch({ type: 'tab.create', id, parentId: space.todayRootId, index: 0, url, now: Date.now() });
-    if (disposition !== 'background-tab') this.select(w, id);
-    else this.tabs.ensure(id);
+    this.tabs.ensure(id);
+    return id;
+  }
+
+  /** A main window to open tabs in: `w` itself, else the first one, else a new one. */
+  private mainWindow(w: Win | null): Win {
+    if (w?.kind === 'main') return w;
+    return [...this.wins.values()].find((x) => x.kind === 'main') ?? this.createWindow({ spaceId: w?.spaceId });
   }
 
   /** A URL from another app (default-browser handling), routed by the link rules. */
@@ -513,8 +555,7 @@ export class Browser {
   littleToSpace(w: Win, spaceId: string) {
     const url = w.little?.webContents.getURL();
     if (!url) return;
-    let target = [...this.wins.values()].find((x) => x.kind === 'main');
-    if (!target) target = this.createWindow({ spaceId });
+    const target = this.mainWindow(null);
     this.switchSpace(target, spaceId);
     this.newTab(target, url);
     w.little?.webContents.close();
@@ -574,6 +615,8 @@ export class Browser {
         const { refreshLiveFolder } = await import('./liveFolders');
         return refreshLiveFolder(this.store, c.id);
       }
+      case 'download': return this.downloads.run(c.op, c.id);
+      case 'permission': return this.permissions.respond(c.id, c.answer);
     }
   }
 
@@ -724,6 +767,7 @@ export class Browser {
       case 'setDefaultBrowser': return void this.command(w, { type: 'setDefaultBrowser' });
       case 'capture': return this.sendUi(w, 'action', { id: 'capture' });
       case 'find': return this.sendUi(w, 'action', { id: 'find' });
+      case 'savePageAs': return void this.savePageAs(w);
       default:
         // commandBar, focusURL, library, newSpace, spaceManager, boost, linkRules, settings
         return this.sendUi(w, 'action', { id });
@@ -757,6 +801,20 @@ export class Browser {
     const file = downloadsCapture(image.toPNG());
     this.toast(w, 'Capture copied and saved to the Library');
     return file;
+  }
+
+  private async savePageAs(w: Win) {
+    const wc = this.activeContents(w);
+    if (!wc || !/^https?:|^file:/.test(wc.getURL())) return;
+    const name = (wc.getTitle() || 'page').replace(/[/\\:*?"<>|]+/g, '-').slice(0, 100);
+    const res = await dialog.showSaveDialog(w.win, { defaultPath: path.join(this.downloads.dir(), `${name}.html`), filters: [{ name: 'Web Page', extensions: ['html'] }] });
+    if (!res.filePath || wc.isDestroyed()) return;
+    try {
+      await wc.savePage(res.filePath, 'HTMLComplete');
+      this.toast(w, `Saved ${path.basename(res.filePath)}`);
+    } catch {
+      this.toast(w, 'Could not save the page');
+    }
   }
 
   private async exportBoost(id: string) {
@@ -893,6 +951,58 @@ export class Browser {
     Menu.buildFromTemplate(template).popup({ window: w.win });
   }
 
+  /** Right-click inside a page (a tab, Peek, or a mini window). `itemId` is the tab, when there is one. */
+  private pageContextMenu(wc: WebContents, params: ContextMenuParams, itemId: string | null) {
+    const w = this.winOf(wc) ?? this.focused();
+    if (!w) return;
+    const entries = contextMenuTemplate(params, {
+      canGoBack: wc.navigationHistory.canGoBack(),
+      canGoForward: wc.navigationHistory.canGoForward(),
+      canSplit: !!itemId && this.store.state.items[itemId]?.kind === 'tab',
+    });
+    const template = entries.map((e): MenuItemConstructorOptions => {
+      if (e.id === 'separator') return { type: 'separator' };
+      const enabled = 'word' in e ? !!e.word : e.enabled !== false;
+      return { label: e.label, enabled, click: () => this.runPageMenu(w, wc, itemId, params, e) };
+    });
+    Menu.buildFromTemplate(template).popup({ window: w.win });
+  }
+
+  private runPageMenu(w: Win, wc: WebContents, itemId: string | null, p: ContextMenuParams, e: PageMenuEntry) {
+    if (wc.isDestroyed()) return;
+    switch (e.id) {
+      // From Peek or a mini window the new tab still lands in a main window's sidebar, where it can be seen.
+      case 'openLinkNewTab': return void this.backgroundTab(this.currentSpace(this.mainWindow(w)), p.linkURL);
+      case 'openLinkSplit': return itemId ? this.splitWith(w, itemId, { url: p.linkURL }) : undefined;
+      case 'openLinkLittle': return void this.createWindow({ kind: 'little', url: p.linkURL, spaceId: w.spaceId });
+      case 'copyLink': return clipboard.writeText(p.linkURL);
+      case 'saveLinkAs': return this.downloads.saveAs(wc, p.linkURL);
+      case 'openImageNewTab': return void this.backgroundTab(this.currentSpace(this.mainWindow(w)), p.srcURL);
+      case 'copyImage': return wc.copyImageAt(p.x, p.y);
+      case 'copyImageAddress': return clipboard.writeText(p.srcURL);
+      case 'saveImageAs': return this.downloads.saveAs(wc, p.srcURL);
+      case 'cut': return wc.cut();
+      case 'copy': return wc.copy();
+      case 'paste': return wc.paste();
+      case 'selectAll': return wc.selectAll();
+      case 'searchSelection': return void this.newTab(this.mainWindow(w), searchURL(this.store.state.settings.searchTemplate, p.selectionText));
+      case 'replaceMisspelling': return e.word ? wc.replaceMisspelling(e.word) : undefined;
+      case 'addToDictionary': return void wc.session.addWordToSpellCheckerDictionary(p.misspelledWord);
+      case 'back': return wc.navigationHistory.goBack();
+      case 'forward': return wc.navigationHistory.goForward();
+      case 'reload': return wc.reload();
+      case 'inspect': return wc.inspectElement(p.x, p.y);
+    }
+  }
+
+  /** The window showing `wc` (as a tab pane, Peek, or mini window page). */
+  private winOf(wc: WebContents): Win | null {
+    for (const w of this.wins.values()) {
+      if (w.little?.webContents === wc || w.peek?.view.webContents === wc || w.attached.some((v) => v.webContents === wc)) return w;
+    }
+    return null;
+  }
+
   /** Delete a pinned item or folder. Deleting a folder archives the tabs inside it (spec). */
   deleteItem(w: Win, id: string) {
     const state = this.store.state;
@@ -960,6 +1070,8 @@ export class Browser {
     if (state.settings.keyOverrides !== prev.settings.keyOverrides) this.buildMenu();
     // Deleting a Profile deletes its browsing data, as the confirmation says.
     for (const p of prev.profiles) if (!state.profiles.some((x) => x.id === p.id)) void clearProfileData(p.id);
+    // Answers changed in Settings or the site panel settle prompts that are already waiting.
+    if (state.settings.sitePermissions !== prev.settings.sitePermissions) setImmediate(() => this.permissions.recheck());
   }
 
   uiState(): State {
@@ -977,6 +1089,16 @@ export class Browser {
       const live = Object.fromEntries(this.tabs.live);
       for (const w of this.wins.values()) this.sendUi(w, 'live', live);
     }, 50);
+  }
+
+  private scheduleProgress() {
+    if (this.progressTimer) return;
+    // At most 4 progress updates a second per window.
+    this.progressTimer = setTimeout(() => {
+      this.progressTimer = null;
+      const progress = Object.fromEntries(this.downloads.progress);
+      for (const w of this.wins.values()) this.sendUi(w, 'downloadProgress', progress);
+    }, 250);
   }
 
   toast(w: Win, message: string, actionLabel?: string, command?: Command) {

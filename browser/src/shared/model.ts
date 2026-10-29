@@ -1,7 +1,7 @@
 // App state. Our own model, shaped by the rebuild notes in ../../spec/features/*.md.
 // Every change goes through `reduce` in ./reducer.ts; the main process owns the only copy.
 
-export const STATE_VERSION = 2;
+export const STATE_VERSION = 3;
 export const DEFAULT_PROFILE_ID = 'default';
 
 /** Auto-archive thresholds (spec/features/auto-archive-and-archive.md), in ms. `never` = no auto-archive. */
@@ -140,6 +140,28 @@ export interface Settings {
   /** action id → accelerator; overrides of the default keymap. `null` = unset. */
   keyOverrides: Record<string, string | null>;
   seenArchiveEducation: boolean;
+  /** origin → permission → saved answer. "Allow once" is never saved. */
+  sitePermissions: Record<string, Record<string, PermissionDecision>>;
+}
+
+export type PermissionDecision = 'allow' | 'deny';
+
+export const DOWNLOADS_LIMIT = 200;
+
+export interface DownloadEntry {
+  id: string;
+  url: string;
+  filename: string;
+  /** Where the file is (or will be) saved. Empty until the user picks a place in a save dialog. */
+  path: string;
+  mime: string;
+  totalBytes: number;
+  receivedBytes: number;
+  state: 'progressing' | 'completed' | 'cancelled' | 'interrupted';
+  paused?: boolean;
+  startedAt: number;
+  endedAt: number | null;
+  profileId: string;
 }
 
 /** Command Bar learning (spec/features/command-bar.md › Ranking). */
@@ -170,6 +192,8 @@ export interface State {
   settings: Settings;
   ranking: Ranking;
   history: HistoryEntry[];
+  /** Newest first, capped at DOWNLOADS_LIMIT. */
+  downloads: DownloadEntry[];
 }
 
 export const DEFAULT_SITE_SEARCHES: SiteSearch[] = [
@@ -193,6 +217,7 @@ export function defaultSettings(): Settings {
     showSpaceHeader: true,
     keyOverrides: {},
     seenArchiveEducation: false,
+    sitePermissions: {},
   };
 }
 

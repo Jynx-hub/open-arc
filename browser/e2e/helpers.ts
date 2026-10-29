@@ -19,3 +19,13 @@ export function command(ui: Page, c: unknown) {
 export function state(ui: Page) {
   return ui.evaluate(() => (window as any).openArc.getState());
 }
+
+export async function waitForState(ui: Page, pred: (s: any) => boolean, ms = 8000) {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
+    const s = await state(ui);
+    if (pred(s)) return s;
+    await ui.waitForTimeout(100);
+  }
+  throw new Error('state never matched');
+}

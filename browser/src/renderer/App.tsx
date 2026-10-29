@@ -5,6 +5,7 @@ import { Sidebar } from './components/Sidebar';
 import { CommandBar, type CommandBarMode } from './components/CommandBar';
 import { ArchiveEducation, BoostEditor, ConfirmDialog, Library, LiveFolderDialog, Settings, SpaceEditor, SpaceManager, Welcome } from './components/Overlays';
 import { EaselView, NoteEditor } from './components/Editors';
+import { PermissionPromptCard } from './components/Site';
 
 type Overlay =
   | { name: 'commandBar'; mode: CommandBarMode; initial: string }
@@ -52,6 +53,8 @@ export function App({ kind }: { kind: 'main' | 'little' }) {
         case 'library': return setOverlay({ name: 'library' });
         case 'archive': return setOverlay({ name: 'library', tab: 'archive' });
         case 'history': return setOverlay({ name: 'library', tab: 'history' });
+        case 'downloads':
+        case 'showDownloads': return setOverlay({ name: 'library', tab: 'downloads' });
         case 'settings': return setOverlay({ name: 'settings' });
         case 'linkRules': return setOverlay({ name: 'settings', tab: 'links' });
         case 'newSpace': return setOverlay({ name: 'editSpace' });
@@ -98,7 +101,7 @@ export function App({ kind }: { kind: 'main' | 'little' }) {
       ro.disconnect();
       window.removeEventListener('resize', report);
     };
-  }, [state === null, win?.sidebarHidden, findOpen, kind]);
+  }, [state === null, win?.sidebarHidden, findOpen, kind, !!win?.permissionPrompt]);
 
   if (!state || !win) return <div className="loading" />;
   const space = state.spaces.find((s) => s.id === win.spaceId) ?? state.spaces[0]!;
@@ -117,7 +120,7 @@ export function App({ kind }: { kind: 'main' | 'little' }) {
               className="link"
               onClick={() => {
                 const c = t.command!;
-                if (c.type === 'runAction' && ['archive', 'library'].includes(c.id)) runUiAction(c.id);
+                if (c.type === 'runAction' && ['archive', 'library', 'downloads'].includes(c.id)) runUiAction(c.id);
                 else void api.command(c);
                 setToasts((ts) => ts.filter((x) => x.id !== t.id));
               }}
@@ -140,6 +143,7 @@ export function App({ kind }: { kind: 'main' | 'little' }) {
       <main className="content">
         {kind === 'little' && <LittleBar state={state} url={win.little?.url ?? ''} title={win.little?.title ?? ''} onEdit={() => openCommandBar('current')} />}
         {kind === 'main' && win.sidebarHidden && <div className="hidden-sidebar-strip" onMouseEnter={() => api.command({ type: 'runAction', id: 'toggleSidebar' })} />}
+        {win.permissionPrompt && (kind === 'little' || win.sidebarHidden) && <PermissionPromptCard prompt={win.permissionPrompt} bar />}
         {findOpen && <FindBar onClose={() => { setFindOpen(false); void api.find(''); }} />}
         <div className="viewport" ref={viewport}>
           {win.snapshots?.map((s, i) => (

@@ -3,6 +3,7 @@ import { ARCHIVE_THRESHOLDS, itemTitle, type ArchiveThreshold, type Boost, type 
 import { KEY_ACTIONS, acceleratorFor } from '../../shared/keymap';
 import { describeDestination } from '../../shared/routing';
 import { api, dispatch, hostOf, uid } from '../api';
+import { DownloadsList, SitePermissionList } from './Site';
 
 const SPACE_COLORS = ['#5b6cff', '#e8590c', '#2f9e44', '#c2255c', '#1098ad', '#7048e8', '#f08c00', '#495057'];
 const THRESHOLD_LABELS: Record<ArchiveThreshold, string> = {
@@ -167,12 +168,21 @@ export function Library({ state, initialTab, onClose }: { state: State; initialT
   return (
     <Modal title="Library" onClose={onClose} wide>
       <nav className="tabs">
-        {[['archive', 'Archive'], ['history', 'History'], ['captures', 'Captures'], ['docs', 'Notes & Easels']].map(([id, label]) => (
+        {[['archive', 'Archive'], ['history', 'History'], ['downloads', 'Downloads'], ['captures', 'Captures'], ['docs', 'Notes & Easels']].map(([id, label]) => (
           <button key={id} className={tab === id ? 'on' : ''} onClick={() => setTab(id!)}>{label}</button>
         ))}
       </nav>
       {tab === 'archive' && <ArchiveView state={state} onClose={onClose} />}
       {tab === 'history' && <HistoryView onClose={onClose} />}
+      {tab === 'downloads' && (
+        <div>
+          <div className="toolbar">
+            <span className="grow muted small">Files save to your Downloads folder.</span>
+            <button disabled={!state.downloads.some((d) => d.state !== 'progressing')} onClick={() => dispatch({ type: 'download.clear' })}>Clear finished</button>
+          </div>
+          <DownloadsList state={state} />
+        </div>
+      )}
       {tab === 'captures' && <CapturesView />}
       {tab === 'docs' && <DocsView state={state} onClose={onClose} />}
     </Modal>
@@ -305,7 +315,7 @@ export function Settings({ state, initialTab, onClose, onEditBoost }: { state: S
   return (
     <Modal title="Settings" onClose={onClose} wide>
       <nav className="tabs">
-        {[['general', 'General'], ['profiles', 'Profiles'], ['links', 'Link Rules'], ['sites', 'Site Search'], ['boosts', 'Boosts'], ['keys', 'Shortcuts']].map(([id, label]) => (
+        {[['general', 'General'], ['profiles', 'Profiles'], ['links', 'Link Rules'], ['sites', 'Site Search'], ['permissions', 'Site Permissions'], ['boosts', 'Boosts'], ['keys', 'Shortcuts']].map(([id, label]) => (
           <button key={id} className={tab === id ? 'on' : ''} onClick={() => setTab(id!)}>{label}</button>
         ))}
       </nav>
@@ -329,6 +339,12 @@ export function Settings({ state, initialTab, onClose, onEditBoost }: { state: S
       {tab === 'profiles' && <ProfilesPane state={state} />}
       {tab === 'links' && <LinkRulesPane state={state} />}
       {tab === 'sites' && <SiteSearchPane state={state} />}
+      {tab === 'permissions' && (
+        <div className="settings-pane">
+          <p className="note">Sites ask before using your camera, microphone, location and similar features. Your answers are remembered here; reset one to be asked again.</p>
+          <SitePermissionList state={state} />
+        </div>
+      )}
       {tab === 'boosts' && (
         <div className="settings-pane">
           <ul className="list">

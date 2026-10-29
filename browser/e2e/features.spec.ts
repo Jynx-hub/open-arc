@@ -2,7 +2,7 @@ import { expect, test, type ElectronApplication, type Page } from '@playwright/t
 import http from 'node:http';
 import path from 'node:path';
 import type { AddressInfo } from 'node:net';
-import { command, launch, state } from './helpers';
+import { command, launch, state, waitForState } from './helpers';
 
 const FIXTURES = path.resolve(__dirname, '../../exporter/test/fixtures/arc');
 let server: http.Server;
@@ -22,15 +22,6 @@ test.afterAll(() => server.close());
 
 async function windowInfo(ui: Page) {
   return ui.evaluate(() => (window as any).openArc.getWindow());
-}
-async function waitForState(ui: Page, pred: (s: any) => boolean, ms = 8000) {
-  const end = Date.now() + ms;
-  while (Date.now() < end) {
-    const s = await state(ui);
-    if (pred(s)) return s;
-    await ui.waitForTimeout(100);
-  }
-  throw new Error('state never matched');
 }
 function pageContents(app: ElectronApplication) {
   return app.evaluate(({ webContents }) => webContents.getAllWebContents().map((w) => ({ id: w.id, url: w.getURL() })));

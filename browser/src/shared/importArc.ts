@@ -150,6 +150,7 @@ export function stateFromArc(model: ArcModel, newId: () => string, now: number, 
     settings: defaultSettings(),
     ranking: { picks: {}, visits: {} },
     history: [],
+    downloads: [],
   };
   const t = (d: Date | null) => d?.getTime() ?? now;
 

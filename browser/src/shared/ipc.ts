@@ -11,6 +11,8 @@ export interface LiveTab {
   canGoForward: boolean;
   audible: boolean;
   muted: boolean;
+  /** Camera/microphone granted to the page since it last navigated (best effort: we can't see when it stops). */
+  capturing?: string[];
 }
 
 export interface Rect {
@@ -37,7 +39,18 @@ export interface WindowInfo {
   /** Little Arc: the page shown in this window (not part of any Space). */
   little: { url: string; title: string } | null;
   zoom: number;
+  /** A site asking for a permission in the page this window shows. One at a time; others wait. */
+  permissionPrompt: PermissionPrompt | null;
 }
+
+export interface PermissionPrompt {
+  id: string;
+  origin: string;
+  /** Keys from shared/permissions.ts PROMPTED (camera, geolocation, …). */
+  keys: string[];
+}
+
+export type DownloadOp = 'open' | 'show' | 'cancel' | 'pause' | 'resume' | 'retry' | 'remove';
 
 export type OpenWhere = 'newTab' | 'current' | 'split' | 'peek' | 'littleArc';
 
@@ -63,7 +76,9 @@ export type Command =
   | { type: 'capture'; rect?: Rect }
   | { type: 'exportBoost'; id: string }
   | { type: 'setDefaultBrowser' }
-  | { type: 'liveFolderRefresh'; id: string };
+  | { type: 'liveFolderRefresh'; id: string }
+  | { type: 'download'; op: DownloadOp; id: string }
+  | { type: 'permission'; id: string; answer: 'allow' | 'once' | 'block' };
 
 export type ContextTarget =
   | { kind: 'item'; id: string }
@@ -90,6 +105,8 @@ export interface UiEvents {
   /** A menu or shortcut action the UI handles (open Command Bar, start rename, …). */
   action: { id: string; arg?: string };
   toast: { message: string; actionLabel?: string; command?: Command };
+  /** Byte counts of running downloads (kept out of State so progress never rewrites the saved file). */
+  downloadProgress: Record<string, { receivedBytes: number; totalBytes: number }>;
 }
 
 export interface Api {

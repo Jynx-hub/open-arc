@@ -1,6 +1,6 @@
 // One WebContentsView per loaded tab item. The sidebar item (and its saved URL) outlives the view:
 // unloading a pinned tab destroys the view but keeps the item (spec: pinned-and-today-tabs.md).
-import { WebContentsView, type WebContents } from 'electron';
+import { WebContentsView, type ContextMenuParams, type WebContents } from 'electron';
 import type { LiveTab } from '../shared/ipc';
 import type { State } from '../shared/model';
 import { partitionFor, profileOfItem, sessionFor } from './profiles';
@@ -13,6 +13,8 @@ export interface TabHooks {
   willNavigate(itemId: string, url: string, wc: WebContents): boolean;
   /** Called on every `dom-ready` so Boosts can inject. */
   domReady(itemId: string, wc: WebContents): void;
+  /** Right-click in the page. */
+  contextMenu(itemId: string, wc: WebContents, params: ContextMenuParams): void;
   liveChanged(): void;
 }
 
@@ -74,6 +76,14 @@ export class TabViews {
     this.hooks.liveChanged();
   }
 
+  /** Camera/microphone in use, shown until the page navigates. */
+  setCapturing(itemId: string, keys: string[]) {
+    const live = this.live.get(itemId);
+    if (!live) return;
+    this.live.set(itemId, { ...live, capturing: [...new Set([...(live.capturing ?? []), ...keys])] });
+    this.hooks.liveChanged();
+  }
+
   loadedIds(): string[] {
     return [...this.entries.keys()];
   }
@@ -108,12 +118,13 @@ export class TabViews {
         canGoForward: wc.navigationHistory.canGoForward(),
         audible: wc.isCurrentlyAudible(),
         muted: wc.isAudioMuted(),
+        capturing: prev?.capturing,
         ...patch,
       });
       this.hooks.liveChanged();
     };
-    const navigated = () => {
-      update();
+    const navigated = (patch: Partial<LiveTab> = {}) => {
+      update(patch);
       const url = wc.getURL();
       this.store.dispatch({ type: 'tab.navigated', id: itemId, url, title: wc.getTitle() || url });
       this.store.dispatch({ type: 'history.visit', url, title: wc.getTitle(), now: Date.now() });
@@ -121,7 +132,7 @@ export class TabViews {
 
     wc.on('did-start-loading', () => update());
     wc.on('did-stop-loading', () => update());
-    wc.on('did-navigate', navigated);
+    wc.on('did-navigate', () => navigated({ capturing: undefined }));
     wc.on('did-navigate-in-page', (_e, _url, isMainFrame) => isMainFrame && navigated());
     wc.on('page-title-updated', (_e, title) => {
       update({ title });
@@ -134,6 +145,7 @@ export class TabViews {
     });
     wc.on('audio-state-changed', () => update());
     wc.on('dom-ready', () => this.hooks.domReady(itemId, wc));
+    wc.on('context-menu', (_e, params) => this.hooks.contextMenu(itemId, wc, params));
     wc.on('will-navigate', (e) => {
       if (this.hooks.willNavigate(itemId, e.url, wc)) e.preventDefault();
     });

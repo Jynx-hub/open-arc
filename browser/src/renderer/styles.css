@@ -216,3 +216,30 @@ kbd { font: 11px ui-monospace, monospace; opacity: 0.8; margin-left: 6px; }
 .capture-overlay { position: fixed; inset: 0; z-index: 20; cursor: crosshair; background: rgba(0,0,0,0.15); outline: none; }
 .capture-hint { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); background: rgba(28,26,38,0.9); color: white; padding: 6px 12px; border-radius: 8px; font-size: 12px; }
 .capture-rect { position: absolute; border: 2px solid white; box-shadow: 0 0 0 9999px rgba(0,0,0,0.3); }
+
+/* ── site controls: URL row, permission prompt, sidebar panels, downloads ── */
+.url-row { display: flex; gap: 4px; align-items: center; }
+.url-row .url-pill { flex: 1; min-width: 0; width: auto; }
+.site-btn.on, .downloads-btn.on { background: var(--hover); color: var(--ink); }
+.capture-dot { color: #e03131; font-size: 10px; margin-left: auto; }
+.permission-prompt { margin-top: 6px; background: var(--panel); border-radius: var(--radius); padding: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.14); display: flex; flex-direction: column; gap: 8px; animation: rise 160ms ease-out; }
+.permission-prompt.bar { margin: 0 0 6px; flex-direction: row; align-items: center; }
+.permission-prompt.bar .permission-text { flex: 1; }
+.permission-actions { display: flex; gap: 4px; justify-content: flex-end; flex-wrap: wrap; }
+.permission-actions button { padding: 4px 9px; border-radius: 6px; background: #f0eff4; font-size: 12px; }
+.permission-actions button.primary { background: var(--space); color: white; }
+.sidebar-panel { margin-top: 6px; background: var(--panel); border-radius: var(--radius); padding: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.12); font-size: 12px; }
+.sidebar-panel header { display: flex; align-items: center; gap: 6px; font-weight: 600; margin-bottom: 4px; }
+.sidebar-panel header > span { flex: 1; min-width: 0; }
+.sidebar-panel .list { margin: 0; padding: 0; list-style: none; }
+.downloads-panel { position: absolute; left: 8px; right: 8px; bottom: 40px; z-index: 6; max-height: 60%; overflow-y: auto; }
+.list.downloads li, .site-perms li { display: flex; align-items: center; gap: 4px; padding: 4px 0; }
+.download progress { width: 100%; height: 4px; display: block; margin: 3px 0 1px; accent-color: var(--space); }
+.clickable-text { cursor: pointer; }
+.clickable-text:hover { text-decoration: underline; }
+.downloads-btn { position: relative; }
+.downloads-btn.active { color: var(--space); }
+.progress-ring { position: absolute; inset: 0; width: 26px; height: 26px; transform: rotate(-90deg); }
+.progress-ring circle { fill: none; stroke-width: 2; }
+.progress-ring .track { stroke: var(--line); }
+.progress-ring .fill { stroke: var(--space); transition: stroke-dashoffset 200ms linear; }

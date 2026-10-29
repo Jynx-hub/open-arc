@@ -11,5 +11,11 @@ export function migrate(state: State): State {
     state.archive.forEach((entry) => entry.items.forEach(fix));
     state.version = 2;
   }
+  if (state.version < 3) {
+    // v3: a downloads list and saved site permissions.
+    state.downloads ??= [];
+    state.settings = { ...state.settings, sitePermissions: state.settings.sitePermissions ?? {} };
+    state.version = 3;
+  }
   return { ...state, version: STATE_VERSION };
 }
