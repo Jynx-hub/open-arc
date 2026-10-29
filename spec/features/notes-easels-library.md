@@ -1,7 +1,7 @@
 # Notes, Easels, Library & Captures
 **Status:** draft · **Data:** sidebar (`arcDocument`, `easel`), cloud · **Cloud-dependent:** **yes**
 
-> ⚠️ **Preservation priority.** Note and Easel *content* lives in Arc's cloud backend (Firebase). Only references are stored locally in the sidebar file. Once Arc's servers shut down, that content is likely gone. Users should export now. Arc itself had already deprecated Notes and offered an export.
+> ⚠️ **Preservation priority.** Note and Easel *content* lives in Arc's cloud backend (Firebase). The sidebar file holds only references. **Easel content is also kept in the local Firestore offline cache** (see [cloud cache](../formats/cloud-cache.md)): text, positions and z-order for each canvas object, including Easels no longer in the sidebar. An exporter can therefore recover Easels after Arc's servers shut down, as long as the cache is still on disk. Notes: Arc 1.170 no longer creates new Notes, and whether old Note content is cached locally is unverified. Arc had already deprecated Notes and offered an export.
 
 ## Notes
 - Rich-text documents that sit in the sidebar next to tabs, created from the "+" menu or opened beside the current page.

@@ -1,5 +1,5 @@
 # Split View
-**Status:** draft · **Data:** [sidebar](../formats/sidebar.md) (`splitView` payload TODO) · **Cloud-dependent:** no
+**Status:** draft · **Data:** [sidebar](../formats/sidebar.md) (`splitView` payload) · **Cloud-dependent:** no
 
 ## What it does
 Shows two or more tabs side by side, or stacked, in one window. Arc saves the split as a single sidebar item that contains the tabs.
@@ -11,7 +11,7 @@ Shows two or more tabs side by side, or stacked, in one window. Arc saves the sp
 - Select multiple tabs, then choose "create Split View".
 
 ## Behavior
-- Panes can be laid out **vertically** (side by side) or **horizontally** (stacked), and the layout can be flipped. Panes are resized by dragging the divider between them.
+- Panes can be laid out side by side or stacked, and the layout can be flipped. The stored `layoutOrientation` names the axis the panes run along: `horizontal` = side by side (confirmed with a sample made by dragging a tab onto the page, 2026-10-28), so `vertical` is stacked. Panes are resized by dragging the divider between them.
 - The split appears in the sidebar as one item with child tabs. It can be renamed (the title field has placeholder text).
 - Pane actions: close the pane, separate it into its own tab, copy a URL into the split, and "separate all", which dissolves the split.
 - Shortcuts jump to the first through fourth Split View in the current window, or to the next or previous one.
