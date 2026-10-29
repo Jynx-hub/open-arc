@@ -9,6 +9,9 @@
 - Bulk actions: show all Little Arc windows, or close all of them.
 - Each open Little Arc window has its own small sidebar container (`littleBrowser(<id>)`) with a temporary Space.
 
+- **Observed (2026-10-27):** creating a tab at the *application* level through scripting (not inside a window) opens it in a new Little Arc window. A new `littleBrowser(<uuid>)` container appears in the sidebar file immediately. The Little Arc window is not listed among the app's scriptable windows. Window size and placement are covered in [ui-layout](ui-layout.md#little-arc-window).
+- Not yet observed: the "open in" control and the move into a Space (these need UI access).
+
 ## Peek
 - A floating preview of a link, shown over the current page without creating a tab.
 - Triggered by clicking a link to a *different site* from a pinned tab or Favorite, or by shift-clicking a link (each is a separate setting).

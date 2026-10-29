@@ -15,4 +15,4 @@
 | **Analytics** | Arc sends telemetry and feature flags to Datadog, Sentry and LaunchDarkly. **Not reproduced**: Open Arc sends no telemetry. | — |
 
 ## Keyboard shortcuts
-Action identifiers and the override format are in [keybindings](../formats/keybindings.md). The **default shortcut table** is still TODO. Fill it in from Arc's Settings → Shortcuts screen; don't take it from the binary.
+Action identifiers and the override format are in [keybindings](../formats/keybindings.md). The default shortcut table is in [keybindings › Defaults](../formats/keybindings.md#defaults). It is provisional: it was built from public sources and still needs checking against Arc's Settings → Shortcuts screen.

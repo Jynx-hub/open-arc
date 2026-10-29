@@ -25,6 +25,11 @@ A **Profile** is a separate browser data store: cookies, logins, history, extens
 - A Space whose Profile is missing on this machine shows a "missing profile" recovery state.
 - Deleting a Space archives its tabs (archive source = that Space).
 
+## Runtime observations (2026-10-27, Arc 1.170.0, via the scripting interface)
+- The scripting `focus` command on a Space switches the window to it at once, and the window's `active space` updates right away. Focusing the original Space switches back. Focusing a Space never creates or removes tabs.
+- The default Space's ID is a fixed, non-UUID string (`thebrowser.company.defaultPersonalSpaceID`). Spaces created later use UUIDs. Implementers importing data must accept both forms.
+- The scripting dictionary lists a window's Spaces in sidebar order. It exposes each Space's `id` and `title` only (no icon or theme).
+
 ## Storage
 Spaces are in `StorableSidebar.json`. Profile assignment is `Space.profile`. Icon and theme are in `Space.customInfo`. Space order is in `sidebarSyncState.container.value.orderedSpaceIDs`. Profile browser data lives in Chromium's `User Data/<Profile>` directories.
 
