@@ -75,7 +75,7 @@ This is a LevelDB database: `*.ldb` tables (Snappy-compressed blocks), a `*.log`
 |---|---|---|
 | `title` | string | |
 | `titleObjectID` | string | ID of the canvas object that acts as the title. |
-| `palette` | string | Color palette name. |
+| `palette` | string | Color palette name (`vibrant` seen). |
 | `shareStatus` | string | Matches the sidebar item's `shareStatus` (`creatorOnly`, …). |
 | `creatorID` | string | Firebase user ID. |
 | `lastModified` | timestamp | Firestore timestamp. |
@@ -86,9 +86,9 @@ This is a LevelDB database: `*.ldb` tables (Snappy-compressed blocks), a `*.log`
 | Field | Type | Notes |
 |---|---|---|
 | `id.value` | string | Object UUID. |
-| `position.rect` | `{x, y, width, height}` (doubles) | Canvas coordinates. |
+| `position.rect` | `{x, y, width, height}` (doubles) | **Normalized**, 0–1. The sample text box was `x 0.2, width 0.6` (centered) with `y 0.035, height 0.072`, so all four values look like fractions of the canvas *width*. That reading is an inference from one sample. |
 | `position.zIndex` | double | Stacking order. |
-| `content` | one-key enum | `text` seen: `{string, style: {fontFamily, fillStyle, paragraphStyle}}`. Image, drawing, capture and live-card cases need samples. |
+| `content` | one-key enum | `text` seen: `{string, style: {fontFamily, fillStyle, paragraphStyle}}`. The style values are names, not CSS: `fontFamily: "clean"`, `paragraphStyle: "h2"` (a heading level), `fillStyle: "none"` (box background). Image, drawing, capture and live-card cases need samples. |
 | `addedInfo` | `{added: timestamp, participant: {id.value, name}}` | Who added the object. |
 | `currentWorkingVersion`, `previousWorkingVersion` | string | Edit-history pointers (UUID / empty). |
 
