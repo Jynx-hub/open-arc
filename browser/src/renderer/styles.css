@@ -254,3 +254,8 @@ kbd { font: 11px ui-monospace, monospace; opacity: 0.8; margin-left: 6px; }
 .app.kind-incognito .empty-content { background: #26252d; }
 .private-label { margin: 10px 8px 2px; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-3); }
 .private-tab { padding-left: 8px; }
+
+/* ── mini player ── */
+.mini-player { display: flex; align-items: center; gap: 6px; margin: 6px 0 2px; padding: 4px 4px 4px 8px; border-radius: var(--radius); background: rgba(255, 255, 255, 0.55); box-shadow: 0 1px 2px rgba(0,0,0,0.08); }
+.mini-player-title { flex: 1; min-width: 0; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 2px 0; }
+.mini-player .icon-btn { font-size: 11px; }

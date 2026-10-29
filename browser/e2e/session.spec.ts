@@ -23,6 +23,15 @@ test.beforeAll(async () => {
       res.setHeader('set-cookie', 'secret=1; Path=/');
       return res.end('<title>Cookie</title>cookie set');
     }
+    if (url === '/video') {
+      // A muted looping video fed by a canvas, so the test needs no media file.
+      return res.end(`<title>Video</title><body style="margin:0"><canvas width="64" height="48"></canvas><video muted autoplay playsinline width="320" height="180"></video><script>
+        const c = document.querySelector('canvas'), g = c.getContext('2d'), v = document.querySelector('video');
+        let n = 0;
+        setInterval(() => { g.fillStyle = n++ % 2 ? '#c33' : '#33c'; g.fillRect(0, 0, 64, 48); }, 50);
+        v.srcObject = c.captureStream(20);
+      </script>`);
+    }
     // The page's title shows which cookies it can see.
     if (url === '/echo') return res.end(`<script>document.title = 'cookie:' + (document.cookie || 'none')</script>`);
     res.end('<title>Plain</title>plain');
@@ -87,5 +96,45 @@ test('a private window keeps its pages, cookies and downloads out of the normal 
   expect(partition).toBeNull(); // in memory: nothing on disk to begin with
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().endsWith('#incognito'))!.close());
   await waitForState(ui, (s) => !s.downloads.some((d: any) => d.private));
+  await app.close();
+});
+
+test('switching away from a playing video floats it in Picture in Picture; the mini player controls it', async () => {
+  const { app, ui } = await launch();
+  await ui.keyboard.press('Escape');
+  const s1 = await openTab(ui, `${base}/video`, 'Video');
+  const videoId = Object.values(s1.items).find((i: any) => i.tab?.savedTitle === 'Video')!.id as string;
+  const live = () => ui.evaluate((id) => (window as any).openArc.getLive().then((l: any) => l[id]), videoId);
+  await expect.poll(async () => (await live())?.playing).toBe(true);
+
+  await openTab(ui, `${base}/plain`, 'Plain');
+  await expect.poll(() => inPage(app, `${base}/video`, '!!document.pictureInPictureElement')).toBe(true);
+
+  // The sidebar shows a player for the tab you left.
+  const player = ui.locator('.mini-player');
+  await expect(player.locator('.mini-player-title')).toHaveText('Video');
+  await player.getByTitle('Mute').click();
+  await expect.poll(async () => (await live())?.muted).toBe(true);
+  await player.getByTitle('Pause').click();
+  await expect.poll(async () => (await live())?.playing).toBe(false);
+  await expect(player.getByTitle('Play')).toBeVisible(); // a paused player stays so it can be resumed
+
+  // Going back to the tab docks the video again and hides the player.
+  await player.locator('.mini-player-title').click();
+  await expect.poll(() => inPage(app, `${base}/video`, '!!document.pictureInPictureElement')).toBe(false);
+  await expect(player).toHaveCount(0);
+  await app.close();
+});
+
+test('automatic Picture in Picture can be turned off', async () => {
+  const { app, ui } = await launch();
+  await ui.keyboard.press('Escape');
+  await openTab(ui, `${base}/video`, 'Video');
+  await command(ui, { type: 'runAction', id: 'toggleAutoPip' });
+  await waitForState(ui, (s) => s.settings.autoPictureInPicture === false);
+  await expect.poll(() => inPage(app, `${base}/video`, '!document.querySelector("video").paused')).toBe(true);
+  await openTab(ui, `${base}/plain`, 'Plain');
+  await ui.waitForTimeout(500);
+  expect(await inPage(app, `${base}/video`, '!!document.pictureInPictureElement')).toBe(false);
   await app.close();
 });

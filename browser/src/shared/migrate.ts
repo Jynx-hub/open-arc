@@ -17,5 +17,10 @@ export function migrate(state: State): State {
     state.settings = { ...state.settings, sitePermissions: state.settings.sitePermissions ?? {} };
     state.version = 3;
   }
+  if (state.version < 4) {
+    // v4: automatic Picture in Picture, on by default.
+    state.settings = { ...state.settings, autoPictureInPicture: state.settings.autoPictureInPicture ?? true };
+    state.version = 4;
+  }
   return { ...state, version: STATE_VERSION };
 }

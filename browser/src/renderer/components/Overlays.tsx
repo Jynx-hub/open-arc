@@ -326,6 +326,7 @@ export function Settings({ state, initialTab, onClose, onEditBoost }: { state: S
           </label>
           <label className="check"><input type="checkbox" checked={state.settings.showSpaceHeader} onChange={(e) => set({ showSpaceHeader: e.target.checked })} /> Show the Space name at the top of the sidebar</label>
           <label className="check"><input type="checkbox" checked={state.settings.peekFromPinned} onChange={(e) => set({ peekFromPinned: e.target.checked })} /> Open links to other sites from pinned tabs and Favorites in a preview</label>
+          <label className="check"><input type="checkbox" checked={state.settings.autoPictureInPicture} onChange={(e) => set({ autoPictureInPicture: e.target.checked })} /> Keep a playing video in a floating window when you switch tabs</label>
           <label className="check"><input type="checkbox" checked={state.settings.peekOnShiftClick} onChange={(e) => set({ peekOnShiftClick: e.target.checked })} /> Shift-click a link to preview it</label>
           <label className="field">Mini windows archive after
             <ThresholdSelect value={state.settings.littleArcArchive} onChange={(v) => set({ littleArcArchive: v })} />

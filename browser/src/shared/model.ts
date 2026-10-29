@@ -1,7 +1,7 @@
 // App state. Our own model, shaped by the rebuild notes in ../../spec/features/*.md.
 // Every change goes through `reduce` in ./reducer.ts; the main process owns the only copy.
 
-export const STATE_VERSION = 3;
+export const STATE_VERSION = 4;
 export const DEFAULT_PROFILE_ID = 'default';
 
 /** Auto-archive thresholds (spec/features/auto-archive-and-archive.md), in ms. `never` = no auto-archive. */
@@ -142,6 +142,8 @@ export interface Settings {
   seenArchiveEducation: boolean;
   /** origin → permission → saved answer. "Allow once" is never saved. */
   sitePermissions: Record<string, Record<string, PermissionDecision>>;
+  /** A playing video moves into a floating Picture in Picture window when you switch away from its tab. */
+  autoPictureInPicture: boolean;
 }
 
 export type PermissionDecision = 'allow' | 'deny';
@@ -220,6 +222,7 @@ export function defaultSettings(): Settings {
     keyOverrides: {},
     seenArchiveEducation: false,
     sitePermissions: {},
+    autoPictureInPicture: true,
   };
 }
 

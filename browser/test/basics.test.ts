@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { fresh, run } from './helpers';
-import { contextMenuTemplate, searchURL, type PageMenuParams } from '../src/shared/contextMenu';
+import { contextMenuTemplate, searchURL, type PageMenuCaps, type PageMenuParams } from '../src/shared/contextMenu';
 import { decide, originOf, permissionKeys } from '../src/shared/permissions';
 import { uniqueFilename } from '../src/shared/files';
 import { migrate } from '../src/shared/migrate';
@@ -11,7 +11,7 @@ const params = (p: Partial<PageMenuParams> = {}): PageMenuParams => ({
   editFlags: { canCut: false, canCopy: false, canPaste: false, canSelectAll: true },
   ...p,
 });
-const caps = { canGoBack: true, canGoForward: false, canSplit: true };
+const caps: PageMenuCaps = { canGoBack: true, canGoForward: false, canSplit: true };
 const ids = (p: Partial<PageMenuParams>, c = caps) => contextMenuTemplate(params(p), c).map((e) => e.id);
 
 describe('page context menu', () => {
@@ -167,5 +167,15 @@ describe('state migration v2 → v3', () => {
     expect(out.downloads).toEqual([]);
     expect(out.settings.sitePermissions).toEqual({});
     expect(out.settings.peekFromPinned).toBe(false);
+    expect(out.settings.autoPictureInPicture).toBe(true);
+  });
+
+  it('v3 → v4 turns automatic Picture in Picture on, but keeps a saved choice', () => {
+    const v3 = structuredClone(fresh()) as any;
+    v3.version = 3;
+    delete v3.settings.autoPictureInPicture;
+    expect(migrate(structuredClone(v3)).settings.autoPictureInPicture).toBe(true);
+    v3.settings.autoPictureInPicture = false;
+    expect(migrate(v3).settings.autoPictureInPicture).toBe(false);
   });
 });

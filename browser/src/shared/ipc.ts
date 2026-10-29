@@ -11,6 +11,8 @@ export interface LiveTab {
   canGoForward: boolean;
   audible: boolean;
   muted: boolean;
+  /** A video or audio element in the page is playing (muted ones too). */
+  playing?: boolean;
   /** Camera/microphone granted to the page since it last navigated (best effort: we can't see when it stops). */
   capturing?: string[];
 }
@@ -90,7 +92,8 @@ export type Command =
   | { type: 'setDefaultBrowser' }
   | { type: 'liveFolderRefresh'; id: string }
   | { type: 'download'; op: DownloadOp; id: string }
-  | { type: 'permission'; id: string; answer: 'allow' | 'once' | 'block' };
+  | { type: 'permission'; id: string; answer: 'allow' | 'once' | 'block' }
+  | { type: 'media'; id: string; op: 'playPause' | 'mute' };
 
 export type ContextTarget =
   | { kind: 'item'; id: string }

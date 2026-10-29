@@ -57,6 +57,7 @@ export const KEY_ACTIONS: KeyAction[] = [
   { id: 'newEasel', label: 'New Easel', accelerator: null, arcId: 'newEasel', menu: 'Tabs' },
   { id: 'capture', label: 'Capture Area', accelerator: null, arcId: 'capturePage', menu: 'Tabs' },
   { id: 'boost', label: 'Boost This Site…', accelerator: null, menu: 'Tabs' },
+  { id: 'toggleAutoPip', label: 'Automatic Picture in Picture On/Off', accelerator: null, menu: 'View' },
   { id: 'linkRules', label: 'Link Rules…', accelerator: null, menu: 'Window' },
   { id: 'settings', label: 'Settings…', accelerator: 'CmdOrCtrl+,', arcId: 'viewPreferences', menu: 'Window' },
 ];

@@ -22,6 +22,18 @@ import { PrivateTabs } from './incognito';
 const SPLIT_GAP = 6;
 const PEEK_INSET = 48;
 
+// Run in pages as a user gesture (Picture in Picture and play() need one).
+const PIP_ENTER = `(() => {
+  const v = [...document.querySelectorAll('video')].find((x) => !x.paused && x.readyState > 1 && !x.disablePictureInPicture);
+  return v && document.pictureInPictureElement !== v ? v.requestPictureInPicture().then(() => true, () => false) : false;
+})()`;
+const PIP_EXIT = `document.pictureInPictureElement ? document.exitPictureInPicture().then(() => true, () => false) : false`;
+const MEDIA_TOGGLE = `(() => {
+  const all = [...document.querySelectorAll('video, audio')];
+  const m = all.find((x) => !x.paused) ?? all[0];
+  if (m) m.paused ? void m.play().catch(() => {}) : m.pause();
+})()`;
+
 /** Actions that make sense in a private window; the rest act on Spaces and sidebar items, which it has none of. */
 const PRIVATE_ACTIONS = new Set([
   'commandBar', 'focusURL', 'newWindow', 'newIncognitoWindow', 'littleArc', 'closeTab', 'copyURL', 'copyMarkdownLink', 'reload', 'back', 'forward',
@@ -61,6 +73,8 @@ export class Browser {
   private wins = new Map<number, Win>();
   private lastFocused: number | null = null;
   private liveTimer: NodeJS.Timeout | null = null;
+  /** Tabs whose video we floated into Picture in Picture; coming back to one puts the video back. */
+  private pipped = new Set<string>();
   private progressTimer: NodeJS.Timeout | null = null;
 
   constructor(private store: Store, private rendererURL: string) {
@@ -243,6 +257,7 @@ export class Browser {
     if (left) w.previousId = left;
     // Update the selection before dispatching: store listeners lay out this window right away.
     w.selectedId = item?.id ?? null;
+    this.pictureInPicture(w, left, item?.id ?? null);
     // Idle time counts from when the user left an item, not when they arrived.
     if (left && state.items[left]) this.store.dispatch({ type: 'tab.touch', id: left, now: Date.now() });
     if (item) {
@@ -258,6 +273,27 @@ export class Browser {
     this.layout(w);
     this.pushWindow(w);
     if (focus && item?.kind === 'tab') this.tabs.get(item.id)?.webContents.focus();
+  }
+
+  /** Leaving a tab with a playing video floats it in Picture in Picture; returning to it docks it again. */
+  private pictureInPicture(w: Win, left: string | null, arrived: string | null) {
+    if (arrived && this.pipped.delete(arrived)) void this.tabs.get(arrived)?.webContents.executeJavaScript(PIP_EXIT, true).catch(() => {});
+    if (!left || !this.store.state.settings.autoPictureInPicture || !this.tabs.live.get(left)?.playing) return;
+    if (this.visibleIds(w).includes(left)) return; // still on screen as another Split View pane
+    const wc = this.tabs.get(left)?.webContents;
+    if (!wc) return;
+    void wc.executeJavaScript(PIP_ENTER, true).then((ok) => ok && this.pipped.add(left)).catch(() => {});
+  }
+
+  /** The sidebar mini player's buttons. */
+  private media(id: string, op: 'playPause' | 'mute') {
+    const wc = this.tabs.get(id)?.webContents;
+    if (!wc || wc.isDestroyed()) return;
+    if (op === 'mute') {
+      wc.setAudioMuted(!wc.isAudioMuted());
+      return this.tabs.refresh(id);
+    }
+    return wc.executeJavaScript(MEDIA_TOGGLE, true).catch(() => {});
   }
 
   private selectDefaultForSpace(w: Win) {
@@ -661,6 +697,7 @@ export class Browser {
       }
       case 'download': return this.downloads.run(c.op, c.id);
       case 'permission': return this.permissions.respond(c.id, c.answer);
+      case 'media': return this.media(c.id, c.op);
     }
   }
 
@@ -825,6 +862,11 @@ export class Browser {
       case 'capture': return this.sendUi(w, 'action', { id: 'capture' });
       case 'find': return this.sendUi(w, 'action', { id: 'find' });
       case 'savePageAs': return void this.savePageAs(w);
+      case 'toggleAutoPip': {
+        const on = !state.settings.autoPictureInPicture;
+        this.store.dispatch({ type: 'settings.update', patch: { autoPictureInPicture: on } });
+        return this.toast(w, on ? 'Automatic Picture in Picture is on' : 'Automatic Picture in Picture is off');
+      }
       default:
         // commandBar, focusURL, library, newSpace, spaceManager, boost, linkRules, settings
         return this.sendUi(w, 'action', { id });

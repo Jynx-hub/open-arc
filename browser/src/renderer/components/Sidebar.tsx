@@ -131,8 +131,37 @@ export function Sidebar(p: Props) {
         </div>
       )}
 
+      <MiniPlayer state={state} win={win} live={p.live} />
+
       <SpaceBar state={state} space={space} openOverlay={p.openOverlay} downloadsOpen={panel === 'downloads'} toggleDownloads={() => setPanel(panel === 'downloads' ? null : 'downloads')} />
     </aside>
+  );
+}
+
+/**
+ * Media playing in a tab you can't see: its title, play/pause, mute, and a jump back to the tab.
+ * A paused player stays until you go back to that tab, so you can resume it from here.
+ */
+function MiniPlayer({ state, win, live }: { state: State; win: WindowInfo; live: Record<string, LiveTab> }) {
+  const sel = win.selectedId ? state.items[win.selectedId] : null;
+  const split = sel?.parentId ? state.items[sel.parentId] : null;
+  const visible = new Set(split?.kind === 'split' ? split.children : win.selectedId ? [win.selectedId] : []);
+  const playingId = Object.keys(live).find((id) => live[id]!.playing && !visible.has(id) && state.items[id]);
+  const [kept, setKept] = useState<string | null>(null);
+  useEffect(() => {
+    if (playingId) setKept(playingId);
+    else if (kept && visible.has(kept)) setKept(null);
+  }, [playingId, kept, win.selectedId]);
+  const id = playingId ?? (kept && live[kept] && state.items[kept] && !visible.has(kept) ? kept : null);
+  const t = id ? live[id] : null;
+  if (!id || !t) return null;
+  return (
+    <div className="mini-player">
+      <Favicon url={t.url} known={t.favicon} size={16} />
+      <button className="mini-player-title" title="Go to tab" onClick={() => api.command({ type: 'select', id })}>{t.title || hostOf(t.url)}</button>
+      <button className="icon-btn" title={t.playing ? 'Pause' : 'Play'} onClick={() => api.command({ type: 'media', id, op: 'playPause' })}>{t.playing ? '❚❚' : '▶'}</button>
+      <button className="icon-btn" title={t.muted ? 'Unmute' : 'Mute'} onClick={() => api.command({ type: 'media', id, op: 'mute' })}>{t.muted ? '🔇' : '🔊'}</button>
+    </div>
   );
 }
 

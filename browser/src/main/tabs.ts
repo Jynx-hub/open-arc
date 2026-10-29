@@ -84,6 +84,15 @@ export class TabViews {
     this.hooks.liveChanged();
   }
 
+  /** Re-read a tab's live fields (after we changed something the page doesn't announce, like muting). */
+  refresh(itemId: string) {
+    const live = this.live.get(itemId);
+    const wc = this.entries.get(itemId)?.view.webContents;
+    if (!live || !wc || wc.isDestroyed()) return;
+    this.live.set(itemId, { ...live, audible: wc.isCurrentlyAudible(), muted: wc.isAudioMuted() });
+    this.hooks.liveChanged();
+  }
+
   loadedIds(): string[] {
     return [...this.entries.keys()];
   }
@@ -118,6 +127,7 @@ export class TabViews {
         canGoForward: wc.navigationHistory.canGoForward(),
         audible: wc.isCurrentlyAudible(),
         muted: wc.isAudioMuted(),
+        playing: prev?.playing,
         capturing: prev?.capturing,
         ...patch,
       });
@@ -132,7 +142,7 @@ export class TabViews {
 
     wc.on('did-start-loading', () => update());
     wc.on('did-stop-loading', () => update());
-    wc.on('did-navigate', () => navigated({ capturing: undefined }));
+    wc.on('did-navigate', () => navigated({ capturing: undefined, playing: false }));
     wc.on('did-navigate-in-page', (_e, _url, isMainFrame) => isMainFrame && navigated());
     wc.on('page-title-updated', (_e, title) => {
       update({ title });
@@ -144,6 +154,8 @@ export class TabViews {
       this.store.dispatch({ type: 'tab.navigated', id: itemId, url: wc.getURL(), title: wc.getTitle(), faviconURL: favicon });
     });
     wc.on('audio-state-changed', () => update());
+    wc.on('media-started-playing', () => update({ playing: true }));
+    wc.on('media-paused', () => update({ playing: false }));
     wc.on('dom-ready', () => this.hooks.domReady(itemId, wc));
     wc.on('context-menu', (_e, params) => this.hooks.contextMenu(itemId, wc, params));
     wc.on('will-navigate', (e) => {
