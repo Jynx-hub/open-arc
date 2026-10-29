@@ -13,6 +13,8 @@ export interface LiveTab {
   muted: boolean;
   /** A video or audio element in the page is playing (muted ones too). */
   playing?: boolean;
+  /** Attached in some window right now (as the selection or a Split View pane). */
+  onScreen?: boolean;
   /** Camera/microphone granted to the page since it last navigated (best effort: we can't see when it stops). */
   capturing?: string[];
 }
@@ -54,7 +56,7 @@ export interface WindowInfo {
   /** A site asking for a permission in the page this window shows. One at a time; others wait. */
   permissionPrompt: PermissionPrompt | null;
   /** Private window: its tabs, which are not sidebar items. */
-  private: { tabs: PrivateTab[]; selectedId: string | null } | null;
+  private: { tabs: PrivateTab[]; selectedId: string | null; partition: string } | null;
 }
 
 export interface PermissionPrompt {

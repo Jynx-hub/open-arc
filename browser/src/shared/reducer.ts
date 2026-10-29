@@ -61,7 +61,8 @@ export type Action =
   | { type: 'sitePermission.set'; origin: string; permission: string; decision: PermissionDecision | null }
   | { type: 'download.upsert'; entry: DownloadEntry }
   | { type: 'download.remove'; id: string }
-  | { type: 'download.clear' }
+  /** Clear finished downloads: a private window's (`privateId` = its partition), else the normal ones. */
+  | { type: 'download.clear'; privateId?: string }
   | { type: 'linkRule.upsert'; rule: LinkRule }
   | { type: 'linkRule.remove'; id: string }
   | { type: 'linkRule.move'; id: string; index: number }
@@ -386,7 +387,7 @@ function apply(s: State, a: Action): void {
       s.downloads = s.downloads.filter((d) => d.id !== a.id);
       return;
     case 'download.clear':
-      s.downloads = s.downloads.filter((d) => d.state === 'progressing');
+      s.downloads = s.downloads.filter((d) => d.state === 'progressing' || (a.privateId ? d.profileId !== a.privateId : !!d.private));
       return;
     case 'linkRule.upsert': {
       const i = s.linkRules.findIndex((r) => r.id === a.rule.id);

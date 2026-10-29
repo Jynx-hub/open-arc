@@ -144,7 +144,7 @@ export function App({ kind }: { kind: 'main' | 'little' | 'incognito' }) {
         </Sidebar>
       )}
       {kind === 'incognito' && !win.sidebarHidden && (
-        <PrivateSidebar win={win} openCommandBar={openCommandBar}>
+        <PrivateSidebar state={state} win={win} openCommandBar={openCommandBar}>
           {toastStack}
         </PrivateSidebar>
       )}

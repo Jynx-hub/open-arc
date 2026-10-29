@@ -49,15 +49,16 @@ export function SitePermissionList({ state, origin }: { state: State; origin?: s
 // ── downloads ──────────────────────────────────────────────────────────────
 
 /** Downloads with live byte counts merged in (progress arrives separately from State). */
-export function useDownloads(state: State): DownloadEntry[] {
+export function useDownloads(state: State, privateId: string | null = null): DownloadEntry[] {
   const [progress, setProgress] = useState<UiEvents['downloadProgress']>({});
   useUiEvent('downloadProgress', setProgress);
-  // A private window's downloads are never listed: they leave no trace in the normal windows.
-  return state.downloads.filter((d) => !d.private).map((d) => (d.state === 'progressing' && progress[d.id] ? { ...d, ...progress[d.id] } : d));
+  // A private window lists only its own downloads, and normal windows never list a private one.
+  const mine = (d: DownloadEntry) => (privateId ? d.private && d.profileId === privateId : !d.private);
+  return state.downloads.filter(mine).map((d) => (d.state === 'progressing' && progress[d.id] ? { ...d, ...progress[d.id] } : d));
 }
 
-export function DownloadsList({ state, limit }: { state: State; limit?: number }) {
-  const downloads = useDownloads(state);
+export function DownloadsList({ state, limit, privateId }: { state: State; limit?: number; privateId?: string }) {
+  const downloads = useDownloads(state, privateId);
   const list = limit ? downloads.slice(0, limit) : downloads;
   const run = (op: DownloadOp, id: string) => void api.command({ type: 'download', op, id });
   if (!list.length) return <p className="muted small">No downloads yet.</p>;

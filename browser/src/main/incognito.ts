@@ -1,9 +1,10 @@
 // A private (incognito) window's tabs. They live only in memory, in a session of their own, and never
 // reach State: no sidebar items, no history, no Archive. Closing the window throws all of it away.
-import { WebContentsView, type ContextMenuParams, type Session, type WebContents } from 'electron';
+import type { ContextMenuParams, Session, WebContents, WebContentsView } from 'electron';
 import { randomUUID } from 'node:crypto';
 import type { PrivateTab } from '../shared/ipc';
-import { QUIET, privateSession } from './profiles';
+import { privateSession } from './profiles';
+import { pageView } from './tabs';
 
 export interface PrivateHooks {
   /** Tabs, the selection, or a tab's title/URL/loading state changed. */
@@ -23,6 +24,7 @@ export class PrivateTabs {
   readonly partition: string;
   private entries: Entry[] = [];
   selectedId: string | null = null;
+  private timer: NodeJS.Timeout | null = null;
 
   constructor(private hooks: PrivateHooks) {
     ({ ses: this.ses, partition: this.partition } = privateSession());
@@ -30,9 +32,7 @@ export class PrivateTabs {
 
   create(url: string, { select = true } = {}): string {
     const id = randomUUID();
-    const view = new WebContentsView({ webPreferences: { session: this.ses, sandbox: true, contextIsolation: true, nodeIntegration: false, disableHtmlFullscreenWindowResize: QUIET } });
-    view.setBorderRadius(8);
-    view.setBackgroundColor('#ffffff');
+    const view = pageView(this.ses);
     this.entries.unshift({ id, view });
     this.wire(view.webContents);
     void view.webContents.loadURL(url).catch(() => {});
@@ -84,6 +84,7 @@ export class PrivateTabs {
 
   /** Close every page and wipe the session (it is in memory only, but cookies would last until quit). */
   async destroy() {
+    if (this.timer) clearTimeout(this.timer);
     for (const { view } of this.entries.splice(0)) if (!view.webContents.isDestroyed()) view.webContents.close();
     this.selectedId = null;
     await this.ses.clearStorageData().catch(() => {});
@@ -91,7 +92,14 @@ export class PrivateTabs {
   }
 
   private wire(wc: WebContents) {
-    const changed = () => !wc.isDestroyed() && this.hooks.changed();
+    // Page events (loading, titles) arrive in bursts; the sidebar needs them a few times a second at most.
+    const changed = () => {
+      if (this.timer || wc.isDestroyed()) return;
+      this.timer = setTimeout(() => {
+        this.timer = null;
+        this.hooks.changed();
+      }, 50);
+    };
     for (const event of ['did-start-loading', 'did-stop-loading', 'did-navigate', 'did-navigate-in-page', 'page-title-updated'] as const) {
       wc.on(event as 'did-start-loading', changed);
     }

@@ -61,7 +61,7 @@ app.whenReady().then(() => {
     const w = b.winFor(e.sender);
     return w ? b.windowInfo(w) : null;
   });
-  ipcMain.handle('getLive', () => Object.fromEntries(b.tabs.live));
+  ipcMain.handle('getLive', () => b.liveSnapshot());
   ipcMain.on('dispatch', (_e, action: Action) => store.dispatch(action));
   ipcMain.handle('command', (e, command: Command) => {
     const w = b.winFor(e.sender);

@@ -32,6 +32,7 @@ test.beforeAll(async () => {
         v.srcObject = c.captureStream(20);
       </script>`);
     }
+    if (url === '/framed') return res.end(`<title>Framed</title><body style="margin:0"><iframe src="/video" width="400" height="300"></iframe>`);
     // The page's title shows which cookies it can see.
     if (url === '/echo') return res.end(`<script>document.title = 'cookie:' + (document.cookie || 'none')</script>`);
     res.end('<title>Plain</title>plain');
@@ -77,6 +78,10 @@ test('a private window keeps its pages, cookies and downloads out of the normal 
   await command(priv, { type: 'open', url: `${base}/file.txt`, where: 'current' });
   await waitForState(ui, (s) => s.downloads.some((d: any) => d.private && d.state === 'completed'));
   expect(fs.existsSync(path.join(downloads, 'private.txt'))).toBe(true);
+  // Listed and announced in the private window only.
+  await expect(priv.locator('.private-sidebar .download')).toHaveCount(1);
+  await expect(priv.locator('.toast')).toContainText('private.txt');
+  expect((await ui.locator('.toast').allTextContents()).join()).not.toContain('private.txt');
 
   // Only the normal tab became an item; the saved file has the normal visit and nothing private.
   const after = await state(ui);
@@ -193,5 +198,24 @@ test('Print sends the current page to the print dialog', async () => {
   });
   await command(ui, { type: 'runAction', id: 'print' });
   expect(await app.evaluate(() => (globalThis as any).printed)).toBe(`${base}/plain`);
+  await app.close();
+});
+
+test('media inside an iframe floats into Picture in Picture and the mini player can pause it', async () => {
+  const { app, ui } = await launch();
+  await ui.keyboard.press('Escape');
+  const s1 = await openTab(ui, `${base}/framed`, 'Framed');
+  const id = Object.values(s1.items).find((i: any) => i.tab?.savedTitle === 'Framed')!.id as string;
+  const live = () => ui.evaluate((tid) => (window as any).openArc.getLive().then((l: any) => l[tid]), id);
+  const inFrame = (js: string) =>
+    app.evaluate(({ webContents }, [u, code]) => {
+      const wc = webContents.getAllWebContents().find((w) => w.getURL() === u)!;
+      return wc.mainFrame.frames[0]!.executeJavaScript(code!);
+    }, [`${base}/framed`, js]);
+  await expect.poll(async () => (await live())?.playing).toBe(true);
+  await openTab(ui, `${base}/plain`, 'Plain');
+  await expect.poll(() => inFrame('!!document.pictureInPictureElement')).toBe(true);
+  await ui.locator('.mini-player').getByTitle('Pause').click();
+  await expect.poll(() => inFrame('document.querySelector("video").paused')).toBe(true);
   await app.close();
 });

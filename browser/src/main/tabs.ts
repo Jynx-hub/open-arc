@@ -1,6 +1,6 @@
 // One WebContentsView per loaded tab item. The sidebar item (and its saved URL) outlives the view:
 // unloading a pinned tab destroys the view but keeps the item (spec: pinned-and-today-tabs.md).
-import { WebContentsView, type ContextMenuParams, type WebContents } from 'electron';
+import { WebContentsView, type ContextMenuParams, type Session, type WebContents } from 'electron';
 import type { LiveTab } from '../shared/ipc';
 import type { State } from '../shared/model';
 import { QUIET, partitionFor, profileOfItem, sessionFor } from './profiles';
@@ -18,6 +18,16 @@ export interface TabHooks {
   /** The page entered or left fullscreen (a video's fullscreen button, `requestFullscreen()`). */
   fullscreen(wc: WebContents, on: boolean): void;
   liveChanged(): void;
+}
+
+/** A page view as every tab gets it, sidebar or private. */
+export function pageView(ses: Session): WebContentsView {
+  const view = new WebContentsView({
+    webPreferences: { session: ses, sandbox: true, contextIsolation: true, nodeIntegration: false, disableHtmlFullscreenWindowResize: QUIET },
+  });
+  view.setBorderRadius(8);
+  view.setBackgroundColor('#ffffff');
+  return view;
 }
 
 interface Entry {
@@ -55,11 +65,7 @@ export class TabViews {
     const profileId = profileOfItem(state, itemId);
     if (!item?.tab || !profileId) return null;
 
-    const view = new WebContentsView({
-      webPreferences: { session: sessionFor(profileId), sandbox: true, contextIsolation: true, nodeIntegration: false, disableHtmlFullscreenWindowResize: QUIET },
-    });
-    view.setBorderRadius(8);
-    view.setBackgroundColor('#ffffff');
+    const view = pageView(sessionFor(profileId));
     this.entries.set(itemId, { view, partition: partitionFor(profileId) });
     this.wire(itemId, view.webContents);
     if (item.tab.savedURL) void view.webContents.loadURL(item.tab.savedURL).catch(() => {});
@@ -156,8 +162,11 @@ export class TabViews {
       this.store.dispatch({ type: 'tab.navigated', id: itemId, url: wc.getURL(), title: wc.getTitle(), faviconURL: favicon });
     });
     wc.on('audio-state-changed', () => update());
-    wc.on('media-started-playing', () => update({ playing: true }));
-    wc.on('media-paused', () => update({ playing: false }));
+    // One event per media element, so count them: one of several pausing doesn't stop the tab "playing".
+    let players = 0;
+    wc.on('media-started-playing', () => update({ playing: ++players > 0 }));
+    wc.on('media-paused', () => update({ playing: (players = Math.max(0, players - 1)) > 0 }));
+    wc.on('did-navigate', () => (players = 0));
     wc.on('dom-ready', () => this.hooks.domReady(itemId, wc));
     wc.on('context-menu', (_e, params) => this.hooks.contextMenu(itemId, wc, params));
     wc.on('enter-html-full-screen', () => this.hooks.fullscreen(wc, true));

@@ -140,19 +140,21 @@ export function Sidebar(p: Props) {
 
 /**
  * Media playing in a tab you can't see: its title, play/pause, mute, and a jump back to the tab.
- * A paused player stays until you go back to that tab, so you can resume it from here.
+ * A paused player stays until you go back to that tab, so you can resume it from here. Tabs on screen
+ * in any window (including another main window) get no player.
  */
 function MiniPlayer({ state, win, live }: { state: State; win: WindowInfo; live: Record<string, LiveTab> }) {
   const sel = win.selectedId ? state.items[win.selectedId] : null;
   const split = sel?.parentId ? state.items[sel.parentId] : null;
   const visible = new Set(split?.kind === 'split' ? split.children : win.selectedId ? [win.selectedId] : []);
-  const playingId = Object.keys(live).find((id) => live[id]!.playing && !visible.has(id) && state.items[id]);
+  const hidden = (id: string) => visible.has(id) || !!live[id]?.onScreen;
+  const playingId = Object.keys(live).find((id) => live[id]!.playing && !hidden(id) && state.items[id]);
   const [kept, setKept] = useState<string | null>(null);
   useEffect(() => {
     if (playingId) setKept(playingId);
-    else if (kept && visible.has(kept)) setKept(null);
-  }, [playingId, kept, win.selectedId]);
-  const id = playingId ?? (kept && live[kept] && state.items[kept] && !visible.has(kept) ? kept : null);
+    else if (kept && hidden(kept)) setKept(null);
+  }, [playingId, kept, win.selectedId, live]);
+  const id = playingId ?? (kept && live[kept] && state.items[kept] && !hidden(kept) ? kept : null);
   const t = id ? live[id] : null;
   if (!id || !t) return null;
   return (

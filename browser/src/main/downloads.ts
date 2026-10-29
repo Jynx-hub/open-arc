@@ -1,6 +1,6 @@
 // Downloads: every Profile's session hands its `DownloadItem`s here. The list lives in State (so it
 // survives restarts); the live items stay in a Map so the UI can pause, resume and cancel them.
-import { app, shell, type DownloadItem, type WebContents } from 'electron';
+import { app, session, shell, type DownloadItem, type WebContents } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -141,8 +141,8 @@ export class Downloads {
         }
         item?.cancel();
         this.store.dispatch({ type: 'download.remove', id });
-        // A private window's session is gone once it closes; its downloads can't be retried.
-        return entry.private ? undefined : sessionFor(entry.profileId).downloadURL(entry.url);
+        // A private entry only exists while its window (and its in-memory session) is open.
+        return (entry.private ? session.fromPartition(entry.profileId) : sessionFor(entry.profileId)).downloadURL(entry.url);
       case 'remove':
         // Removing a running download stops it; the file of a finished one stays on disk.
         this.store.dispatch({ type: 'download.remove', id });

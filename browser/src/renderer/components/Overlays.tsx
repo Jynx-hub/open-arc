@@ -178,7 +178,7 @@ export function Library({ state, initialTab, onClose }: { state: State; initialT
         <div>
           <div className="toolbar">
             <span className="grow muted small">Files save to your Downloads folder.</span>
-            <button disabled={!state.downloads.some((d) => d.state !== 'progressing')} onClick={() => dispatch({ type: 'download.clear' })}>Clear finished</button>
+            <button disabled={!state.downloads.some((d) => !d.private && d.state !== 'progressing')} onClick={() => dispatch({ type: 'download.clear' })}>Clear finished</button>
           </div>
           <DownloadsList state={state} />
         </div>

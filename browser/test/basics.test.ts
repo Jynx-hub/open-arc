@@ -155,6 +155,16 @@ describe('downloads', () => {
   });
 });
 
+describe('private downloads', () => {
+  const dl = (id: string, extra: object = {}) => ({ id, url: 'https://a.test/f', filename: 'f', path: '/tmp/f', mime: 'text/plain', totalBytes: 1, receivedBytes: 1, state: 'completed' as const, startedAt: 1, endedAt: 2, profileId: 'p', ...extra });
+  it('clearing finished downloads in one scope leaves the other alone', () => {
+    let s = fresh();
+    for (const e of [dl('normal'), dl('mine', { private: true, profileId: 'incognito-a' }), dl('other', { private: true, profileId: 'incognito-b' })]) s = run(s, { type: 'download.upsert', entry: e });
+    expect(run(s, { type: 'download.clear' }).downloads.map((d) => d.id).sort()).toEqual(['mine', 'other']);
+    expect(run(s, { type: 'download.clear', privateId: 'incognito-a' }).downloads.map((d) => d.id).sort()).toEqual(['normal', 'other']);
+  });
+});
+
 describe('state migration v2 → v3', () => {
   it('adds an empty downloads list and site permissions, keeping other settings', () => {
     const v2 = structuredClone(fresh()) as any;

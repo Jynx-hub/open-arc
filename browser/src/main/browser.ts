@@ -3,7 +3,7 @@
 import { BrowserWindow, ClipboardItem, Menu, WebContentsView, app, clipboard, dialog, shell, type ContextMenuParams, type MenuItemConstructorOptions, type WebContents } from 'electron';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import type { Command, ContextTarget, Rect, Snapshot, UiEvents, WindowInfo } from '../shared/ipc';
+import type { Command, ContextTarget, LiveTab, Rect, Snapshot, UiEvents, WindowInfo } from '../shared/ipc';
 import { itemTitle, type Item, type Space, type State } from '../shared/model';
 import type { Action } from '../shared/reducer';
 import { isPersistent, rootOf, sectionOf, spaceOf, subtree } from '../shared/tree';
@@ -28,10 +28,15 @@ const PIP_ENTER = `(() => {
   return v && document.pictureInPictureElement !== v ? v.requestPictureInPicture().then(() => true, () => false) : false;
 })()`;
 const PIP_EXIT = `document.pictureInPictureElement ? document.exitPictureInPicture().then(() => true, () => false) : false`;
-const MEDIA_TOGGLE = `(() => {
-  const all = [...document.querySelectorAll('video, audio')];
-  const m = all.find((x) => !x.paused) ?? all[0];
-  if (m) m.paused ? void m.play().catch(() => {}) : m.pause();
+const MEDIA_PAUSE = `(() => {
+  const playing = [...document.querySelectorAll('video, audio')].filter((x) => !x.paused);
+  playing.forEach((x) => x.pause());
+  return playing.length > 0;
+})()`;
+const MEDIA_PLAY = `(() => {
+  const m = document.querySelector('video, audio');
+  if (m) void m.play().catch(() => {});
+  return !!m;
 })()`;
 
 /** Actions that make sense in a private window; the rest act on Spaces and sidebar items, which it has none of. */
@@ -64,7 +69,7 @@ interface Win {
    * The page that is fullscreen in this window. `leaving`: the page has left, but the window is still
    * animating out of macOS fullscreen; the page keeps the whole window until that finishes.
    */
-  htmlFullscreen: { wc: WebContents; windowFollows: boolean; leaving: boolean } | null;
+  htmlFullscreen: { wc: WebContents; windowFollows: boolean; leaving: boolean; exitAsked?: boolean } | null;
   /** UI actions queued until the window's UI says it is listening. */
   pending: UiEvents['action'][] | null;
   overlaySeq: number;
@@ -79,7 +84,7 @@ export class Browser {
   private lastFocused: number | null = null;
   private liveTimer: NodeJS.Timeout | null = null;
   /** Tabs whose video we floated into Picture in Picture; coming back to one puts the video back. */
-  private pipped = new Set<string>();
+  private pipped = new Map<string, string>(); // tab id → the page URL it was floated from
   private progressTimer: NodeJS.Timeout | null = null;
 
   constructor(private store: Store, private rendererURL: string) {
@@ -93,7 +98,8 @@ export class Browser {
     });
     this.downloads = new Downloads(store, {
       completed: (entry) => {
-        const w = this.focused();
+        // A private download is announced only in its own window.
+        const w = entry.private ? [...this.wins.values()].find((x) => x.priv?.partition === entry.profileId) : this.focused();
         if (w) this.toast(w, `Downloaded ${entry.filename}`, 'Show', { type: 'download', op: 'show', id: entry.id });
       },
       progress: () => this.scheduleProgress(),
@@ -195,7 +201,6 @@ export class Browser {
   windowInfo(w: Win): WindowInfo {
     const peekWc = w.peek?.view.webContents;
     const littleWc = w.little?.webContents;
-    const selectedView = w.selectedId ? this.tabs.get(w.selectedId) : null;
     return {
       id: w.win.id,
       kind: w.kind,
@@ -205,10 +210,10 @@ export class Browser {
       snapshots: w.snapshots ?? w.peekBackdrop,
       peek: peekWc ? { url: peekWc.getURL(), title: peekWc.getTitle() } : null,
       little: littleWc ? { url: littleWc.getURL(), title: littleWc.getTitle() } : null,
-      zoom: selectedView ? selectedView.webContents.getZoomFactor() : 1,
+      zoom: this.activeContents(w)?.getZoomFactor() ?? 1,
       // The focused page first, then the other Split View panes, so no visible page waits on a hidden prompt.
       permissionPrompt: this.permissions.promptFor([this.activeContents(w), ...w.attached.map((v) => v.webContents)].filter((x): x is WebContents => !!x)),
-      private: w.priv ? { tabs: w.priv.tabs(), selectedId: w.priv.selectedId } : null,
+      private: w.priv ? { tabs: w.priv.tabs(), selectedId: w.priv.selectedId, partition: w.priv.partition } : null,
     };
   }
 
@@ -226,6 +231,7 @@ export class Browser {
       wc.close();
     }
     if (w.peek) w.peek.view.webContents.close();
+    this.scheduleLive();
     if (w.priv) {
       this.downloads.forgetPrivate(w.priv.partition);
       void w.priv.destroy();
@@ -293,12 +299,16 @@ export class Browser {
 
   /** Leaving a tab with a playing video floats it in Picture in Picture; returning to it docks it again. */
   private pictureInPicture(w: Win, left: string | null, arrived: string | null) {
-    if (arrived && this.pipped.delete(arrived)) void this.tabs.get(arrived)?.webContents.executeJavaScript(PIP_EXIT, true).catch(() => {});
+    const back = arrived ? this.tabs.get(arrived)?.webContents : null;
+    // Only the page we floated: a tab that has since navigated keeps whatever PiP its new page chose.
+    if (arrived && back && this.pipped.get(arrived) === back.getURL()) void inFrames(back, PIP_EXIT);
+    if (arrived) this.pipped.delete(arrived);
     if (!left || !this.store.state.settings.autoPictureInPicture || !this.tabs.live.get(left)?.playing) return;
     if (this.visibleIds(w).includes(left)) return; // still on screen as another Split View pane
     const wc = this.tabs.get(left)?.webContents;
     if (!wc) return;
-    void wc.executeJavaScript(PIP_ENTER, true).then((ok) => ok && this.pipped.add(left)).catch(() => {});
+    const url = wc.getURL();
+    void inFrames(wc, PIP_ENTER).then((ok) => ok && this.pipped.set(left, url));
   }
 
   /**
@@ -342,7 +352,8 @@ export class Browser {
       wc.setAudioMuted(!wc.isAudioMuted());
       return this.tabs.refresh(id);
     }
-    return wc.executeJavaScript(MEDIA_TOGGLE, true).catch(() => {});
+    if (this.tabs.live.get(id)?.playing) return Promise.all(wc.mainFrame.framesInSubtree.map((f) => f.executeJavaScript(MEDIA_PAUSE, true).catch(() => false)));
+    return inFrames(wc, MEDIA_PLAY);
   }
 
   private selectDefaultForSpace(w: Win) {
@@ -407,14 +418,20 @@ export class Browser {
     if (fsView) {
       // Switched away from it: the page leaves fullscreen first, still attached (Electron ignores the exit
       // of a detached page). Its leave event lays out the new selection.
-      if (!want.includes(fsView) && !w.htmlFullscreen!.leaving) void fsWc!.executeJavaScript('document.fullscreenElement && document.exitFullscreen()', true).catch(() => {});
+      if (!want.includes(fsView) && !w.htmlFullscreen!.leaving && !w.htmlFullscreen!.exitAsked) {
+        w.htmlFullscreen!.exitAsked = true;
+        void fsWc!.executeJavaScript('document.fullscreenElement && document.exitFullscreen()', true).catch(() => {});
+      }
       const [width, height] = w.win.getContentSize();
       want.splice(0, want.length, fsView);
       rects.splice(0, rects.length, { x: 0, y: 0, width: width!, height: height! });
     }
+    const before = w.attached.length;
+    let moved = false;
     for (const v of w.attached) if (!want.includes(v)) this.detach(w, v);
     want.forEach((v, i) => {
       if (!w.attached.includes(v)) {
+        moved = true;
         // A view lives in one window at a time; take it from whichever window has it.
         for (const other of this.wins.values()) if (other !== w && other.attached.includes(v)) this.detach(other, v);
         w.win.contentView.addChildView(v);
@@ -423,6 +440,8 @@ export class Browser {
       v.setBounds(rects[i]!);
       v.setBorderRadius(fsView ? 0 : 8);
     });
+    // The mini player hides tabs that are on screen anywhere.
+    if (moved || w.attached.length !== before) this.scheduleLive();
     if (w.peek && !w.overlay) {
       w.win.contentView.addChildView(w.peek.view); // re-adding raises it above the page
       w.peek.view.setBounds({ x: b.x + PEEK_INSET, y: b.y + PEEK_INSET, width: Math.max(200, b.width - PEEK_INSET * 2), height: Math.max(200, b.height - PEEK_INSET - 16) });
@@ -1239,6 +1258,7 @@ export class Browser {
         } else if (w.selectedId && !now.items[w.selectedId]) this.selectDefaultForSpace(w);
       }
     });
+    if (state.items !== prev.items) for (const id of this.pipped.keys()) if (!state.items[id]) this.pipped.delete(id);
     if (state.settings.keyOverrides !== prev.settings.keyOverrides) this.buildMenu();
     // Deleting a Profile deletes its browsing data, as the confirmation says.
     for (const p of prev.profiles) if (!state.profiles.some((x) => x.id === p.id)) void clearProfileData(p.id);
@@ -1258,9 +1278,15 @@ export class Browser {
     if (this.liveTimer) return;
     this.liveTimer = setTimeout(() => {
       this.liveTimer = null;
-      const live = Object.fromEntries(this.tabs.live);
+      const live = this.liveSnapshot();
       for (const w of this.wins.values()) this.sendUi(w, 'live', live);
     }, 50);
+  }
+
+  /** Live tab fields for the UI, with which tabs are on screen in some window. */
+  liveSnapshot(): Record<string, LiveTab> {
+    const shown = new Set([...this.wins.values()].flatMap((w) => w.attached.map((v) => this.tabs.itemFor(v.webContents))));
+    return Object.fromEntries([...this.tabs.live].map(([id, l]) => [id, { ...l, onScreen: shown.has(id) }]));
   }
 
   private scheduleProgress() {
@@ -1308,6 +1334,15 @@ function changedSlices(state: State, prev: State): Partial<State> {
     if (state[key] !== prev[key]) (out as Record<string, unknown>)[key] = ui[key];
   }
   return out;
+}
+
+/** Run `js` in the page's frames, top first, as a user gesture, until one returns true (media is often in an iframe). */
+async function inFrames(wc: WebContents, js: string): Promise<boolean> {
+  if (wc.isDestroyed()) return false;
+  for (const frame of wc.mainFrame.framesInSubtree) {
+    if (await frame.executeJavaScript(js, true).catch(() => false)) return true;
+  }
+  return false;
 }
 
 function firstTab(state: State, rootId: string): string | null {
