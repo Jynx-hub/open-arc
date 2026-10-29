@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { appleTimeToDate, readArcFile } from '../src/read.js';
 import { buildModel, countTabs } from '../src/model.js';
 import { toArchiveCsv, toBookmarksHtml, toMarkdown } from '../src/formats.js';
+import { uniqueNames } from '../src/cloudFormats.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURE = path.join(here, 'fixtures', 'arc');
@@ -52,7 +53,27 @@ test('today holds split views and keeps non-tab items as "other"', () => {
   const [split, note] = work.today;
   assert.equal(split.type, 'splitView');
   assert.equal(countTabs([split]), 2);
-  assert.deepEqual(note, { type: 'other', kind: 'arcDocument', title: 'Meeting notes', createdAt: note.createdAt });
+  assert.equal(split.layout.orientation, 'sideBySide');
+  assert.deepEqual(split.layout.sizes.map((s) => Math.round(s * 100) / 100), [0.3, 0.7]);
+  assert.deepEqual(note, { type: 'other', kind: 'arcDocument', title: 'Meeting notes', createdAt: note.createdAt, ref: 'DOC-1' });
+});
+
+test('split panes missing from the width factors still get a share', () => {
+  const sidebar = JSON.parse(fs.readFileSync(path.join(FIXTURE, 'StorableSidebar.json'), 'utf8'));
+  const raw = JSON.stringify(sidebar).replace('"itemWidthFactors":["TAB-L",0.3]', '"itemWidthFactors":["TAB-L",1]');
+  const split = buildModel({ sidebar: JSON.parse(raw) }).spaces.find((s) => s.title === 'Work').today[0];
+  assert.deepEqual(split.layout.sizes.map((s) => Math.round(s * 100) / 100), [0.67, 0.33]);
+});
+
+test('unique export names survive suffix and case collisions', () => {
+  assert.deepEqual(uniqueNames(['a', 'a', 'a-2', 'Notes', 'notes']), ['a', 'a-2', 'a-2-2', 'Notes', 'notes-2']);
+});
+
+test('space icons and theme colors', () => {
+  const work = model.spaces.find((s) => s.title === 'Work');
+  const home = model.spaces.find((s) => s.title === 'Home');
+  assert.deepEqual([work.icon, work.iconKind, work.color], ['briefcase', 'symbol', null]);
+  assert.deepEqual([home.icon, home.iconKind, home.color], ['🏡', 'emoji', '#4e3a5a']);
 });
 
 test('survives cycles in damaged files', () => {
@@ -95,7 +116,7 @@ test('markdown and csv', () => {
 test('cli writes every format and never reads secrets', () => {
   const out = fs.mkdtempSync(path.join(os.tmpdir(), 'arc-export-'));
   // The fixture dir contains a StorableAuthState.json marker; it must not leak into any output.
-  execFileSync(process.execPath, [CLI, '--arc-dir', FIXTURE, '--out', out], { stdio: 'pipe' });
+  execFileSync(process.execPath, [CLI, '--arc-dir', FIXTURE, '--firestore-dir', path.join(out, 'none'), '--out', out], { stdio: 'pipe' });
   const files = fs.readdirSync(out).sort();
   assert.deepEqual(files, ['arc-archive.csv', 'arc-bookmarks.html', 'arc-export.json', 'arc-spaces.md']);
   for (const f of files) assert.doesNotMatch(fs.readFileSync(path.join(out, f), 'utf8'), /THIS_FILE_MUST_NEVER_BE_READ/);

@@ -19,6 +19,10 @@
           },
           "SPACE-HOME", {
             "id": "SPACE-HOME", "title": "Home", "profile": { "default": true },
+            "customInfo": {
+              "iconType": { "emoji": 127969, "emoji_v2": "🏡" },
+              "windowTheme": { "background": { "single": { "_0": { "style": { "color": { "_0": { "blendedSingleColor": { "_0": { "color": { "red": 0.306, "green": 0.228, "blue": 0.353, "alpha": 1, "colorSpace": "extendedSRGB" }, "translucencyStyle": "light", "modifiers": { "intensityFactor": 0.8, "overlay": "grain", "noiseFactor": 0 } } } } } }, "isVibrant": true, "contentOverBackgroundAppearance": "dark" } } } }
+            },
             "containerIDs": ["pinned", "HOME-PINNED", "unpinned", "HOME-TODAY"]
           }
         ],
@@ -32,7 +36,7 @@
           "TAB-A", { "id": "TAB-A", "parentID": "GROUP-1", "childrenIds": [], "title": null, "createdAt": 700000005, "isUnread": false, "originatingDevice": null, "data": { "tab": { "savedURL": "https://example.org/a?x=1&y=<2>", "savedTitle": "A & \"B\"", "timeLastActiveAt": 700000300 } } },
           "TAB-DOCS", { "id": "TAB-DOCS", "parentID": "WORK-PINNED", "childrenIds": [], "title": null, "createdAt": 700000006, "isUnread": false, "originatingDevice": null, "data": { "tab": { "savedURL": "https://docs.example.com/", "savedTitle": "Docs", "timeLastActiveAt": 700000400 } } },
           "WORK-TODAY", { "id": "WORK-TODAY", "parentID": null, "childrenIds": ["SPLIT-1", "NOTE-1"], "title": null, "createdAt": 700000000, "isUnread": false, "originatingDevice": null, "data": { "itemContainer": { "containerType": { "spaceItems": { "_0": "SPACE-WORK" } } } } },
-          "SPLIT-1", { "id": "SPLIT-1", "parentID": "WORK-TODAY", "childrenIds": ["TAB-L", "TAB-R"], "title": null, "createdAt": 700000007, "isUnread": false, "originatingDevice": null, "data": { "splitView": {} } },
+          "SPLIT-1", { "id": "SPLIT-1", "parentID": "WORK-TODAY", "childrenIds": ["TAB-L", "TAB-R"], "title": null, "createdAt": 700000007, "isUnread": false, "originatingDevice": null, "data": { "splitView": { "layoutOrientation": "horizontal", "itemWidthFactors": ["TAB-L", 0.3], "focusItemID": null, "customInfo": null, "timeLastActiveAt": 700000007 } } },
           "TAB-L", { "id": "TAB-L", "parentID": "SPLIT-1", "childrenIds": [], "title": null, "createdAt": 700000008, "isUnread": false, "originatingDevice": null, "data": { "tab": { "savedURL": "https://left.example.com/", "savedTitle": "Left" } } },
           "TAB-R", { "id": "TAB-R", "parentID": "SPLIT-1", "childrenIds": [], "title": null, "createdAt": 700000009, "isUnread": false, "originatingDevice": null, "data": { "tab": { "savedURL": "https://right.example.com/", "savedTitle": "Right" } } },
           "NOTE-1", { "id": "NOTE-1", "parentID": "WORK-TODAY", "childrenIds": [], "title": "Meeting notes", "createdAt": 700000010, "isUnread": false, "originatingDevice": null, "data": { "arcDocument": { "arcDocumentID": "DOC-1" } } },
