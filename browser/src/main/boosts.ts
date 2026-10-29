@@ -1,5 +1,7 @@
 // Boosts (spec/features/boosts.md): per-site CSS, hidden elements, font/color, and JS in an isolated world.
 import type { WebContents } from 'electron';
+// @ts-ignore: plain JS module with JSDoc types
+import { colorSchemeCss } from '../../../exporter/src/cloudFormats.js';
 import type { Boost, State } from '../shared/model';
 
 const ISOLATED_WORLD = 1001;
@@ -18,6 +20,7 @@ export function boostCss(boost: Boost): string {
   const parts: string[] = [];
   if (boost.font) parts.push(`body, body * { font-family: ${JSON.stringify(boost.font)}, system-ui, sans-serif !important; }`);
   if (boost.color) parts.push(`html { filter: none; } body { background-color: ${boost.color} !important; }`);
+  if (boost.colorScheme) parts.push(colorSchemeCss(boost.colorScheme) as string);
   if (boost.zapped.length) parts.push(`${boost.zapped.join(',\n')} { display: none !important; }`);
   if (boost.css.trim()) parts.push(boost.css);
   return parts.join('\n');

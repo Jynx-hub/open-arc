@@ -150,7 +150,8 @@ kbd { font: 11px ui-monospace, monospace; opacity: 0.8; margin-left: 6px; }
 .doc-toolbar button.on { background: color-mix(in srgb, var(--space) 18%, white); }
 .note-text { flex: 1; border: 0; outline: 0; resize: none; padding: 28px max(28px, calc(50% - 340px)); font: 15px/1.6 ui-serif, Georgia, serif; }
 .markdown { flex: 1; overflow: auto; padding: 28px max(28px, calc(50% - 340px)); font: 15px/1.6 ui-serif, Georgia, serif; user-select: text; }
-.easel-canvas { flex: 1; width: 100%; cursor: crosshair; background-image: radial-gradient(rgba(0,0,0,0.08) 1px, transparent 1px); background-size: 18px 18px; touch-action: none; }
+.easel-scroll { flex: 1; position: relative; overflow: auto; }
+.easel-canvas { display: block; min-width: 100%; min-height: 100%; cursor: crosshair; background-image: radial-gradient(rgba(0,0,0,0.08) 1px, transparent 1px); background-size: 18px 18px; touch-action: none; }
 .easel-text-input { position: absolute; border: 1px solid var(--space); border-radius: 4px; padding: 2px 4px; }
 
 /* ── modals & overlays ── */

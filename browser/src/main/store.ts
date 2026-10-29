@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { STATE_VERSION, type State } from '../shared/model';
+import { migrate } from '../shared/migrate';
 import { initialState, reduce, type Action } from '../shared/reducer';
 
 type Listener = (state: State, prev: State) => void;
@@ -71,9 +72,4 @@ export class StateTooNewError extends Error {
   constructor(readonly version: number) {
     super(`The saved state is from a newer version of the app (format ${version}). Update the app to open it.`);
   }
-}
-
-function migrate(state: State): State {
-  // v1 is the first version; future migrations go here, one step per version.
-  return state;
 }

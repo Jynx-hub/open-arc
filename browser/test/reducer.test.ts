@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { fresh, run, tab } from './helpers';
 import { isPersistent, sectionOf } from '../src/shared/tree';
+import { migrate } from '../src/shared/migrate';
+import { STATE_VERSION } from '../src/shared/model';
 
 describe('pinned and Today', () => {
   it('moves a tab across the divider and keeps order', () => {
@@ -155,3 +157,18 @@ describe('review regressions', () => {
     expect(s.items.T1!.children).toEqual(before);
   });
 });
+
+describe('state migrations', () => {
+  it('v1 → v2 gives every Easel a scene, including archived ones', () => {
+    const s = fresh();
+    const v1 = structuredClone(s) as any;
+    v1.version = 1;
+    v1.items.e1 = { id: 'e1', parentId: null, children: [], title: null, createdAt: 0, kind: 'easel', easel: { scene: null } };
+    v1.archive.push({ id: 'a', archivedAt: 0, reason: 'manual', source: { kind: 'unknown' }, items: [{ id: 'e2', parentId: null, children: [], title: null, createdAt: 0, kind: 'easel', easel: { scene: null } }] });
+    const out = migrate(v1);
+    expect(out.version).toBe(STATE_VERSION);
+    expect(out.items.e1!.easel).toEqual({ scene: { shapes: [] } });
+    expect(out.archive[0]!.items[0]!.easel).toEqual({ scene: { shapes: [] } });
+  });
+});
+

@@ -7,6 +7,7 @@ import {
   type ArchiveReason,
   type ArchiveSource,
   type Boost,
+  type EaselScene,
   type Item,
   type LinkRule,
   type Settings,
@@ -16,7 +17,7 @@ import {
 } from './model';
 import { isAncestor, isPersistent, rootOf, sectionOf, spaceOf, subtree } from './tree';
 
-const HISTORY_LIMIT = 5000;
+export const HISTORY_LIMIT = 5000;
 const VISITS_PER_KEY = 20;
 
 export type Action =
@@ -46,7 +47,7 @@ export type Action =
   | { type: 'note.create'; id: string; parentId: string; index?: number; now: number }
   | { type: 'note.update'; id: string; markdown: string }
   | { type: 'easel.create'; id: string; parentId: string; index?: number; now: number }
-  | { type: 'easel.update'; id: string; scene: unknown }
+  | { type: 'easel.update'; id: string; scene: EaselScene }
   | { type: 'item.archive'; ids: string[]; reason: ArchiveReason; now: number; source?: ArchiveSource }
   | { type: 'space.clearToday'; spaceId: string; keepIds: string[]; now: number }
   | { type: 'archive.restore'; entryId: string }
@@ -309,7 +310,7 @@ function apply(s: State, a: Action): void {
     }
     case 'easel.create': {
       const item = newItem(a.id, 'easel', a.parentId, a.now, null);
-      item.easel = { scene: null };
+      item.easel = { scene: { shapes: [] } };
       createContainer(s, item, a.index, []);
       return;
     }

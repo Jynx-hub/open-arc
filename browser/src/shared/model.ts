@@ -1,7 +1,7 @@
 // App state. Our own model, shaped by the rebuild notes in ../../spec/features/*.md.
 // Every change goes through `reduce` in ./reducer.ts; the main process owns the only copy.
 
-export const STATE_VERSION = 1;
+export const STATE_VERSION = 2;
 export const DEFAULT_PROFILE_ID = 'default';
 
 /** Auto-archive thresholds (spec/features/auto-archive-and-archive.md), in ms. `never` = no auto-archive. */
@@ -61,7 +61,7 @@ export interface Item {
   split?: { orientation: SplitOrientation; sizes: number[] };
   /** Notes are local Markdown; Easels are a scene JSON. Stored inline. */
   note?: { markdown: string };
-  easel?: { scene: unknown };
+  easel?: { scene: EaselScene };
   live?: { feed: string; kind: 'rss' | 'github'; lastFetchedAt: number | null };
   /** Notes and Easels: last time the user was in them (tabs keep theirs in `tab`). */
   lastActiveAt?: number;
@@ -95,6 +95,25 @@ export interface SiteSearch {
   template: string;
 }
 
+/** A local Easel canvas. Text `y` is the baseline; `w` wraps text, `size`/`font` default to 18px system-ui. */
+export type EaselShape =
+  | { kind: 'stroke'; color: string; width: number; points: [number, number][] }
+  | { kind: 'text'; x: number; y: number; text: string; color: string; w?: number; size?: number; font?: string }
+  | { kind: 'image'; x: number; y: number; w: number; h: number; src: string };
+
+export interface EaselScene {
+  shapes: EaselShape[];
+}
+
+/** Color-wheel recolor settings (imported from Arc Boosts; see spec/formats/cloud-cache.md). */
+export interface BoostColorScheme {
+  hue: number;
+  /** 0–1 */
+  saturation: number;
+  secondaryHueOffset: number;
+  invertLightness: boolean;
+}
+
 export interface Boost {
   id: string;
   name: string;
@@ -106,6 +125,7 @@ export interface Boost {
   zapped: string[];
   font: string | null;
   color: string | null;
+  colorScheme?: BoostColorScheme | null;
 }
 
 export interface Settings {

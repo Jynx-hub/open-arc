@@ -771,7 +771,7 @@ export class Browser {
 
   private async importArc(w: Win, dir?: string) {
     const { importFromArc } = await import('./importer');
-    const summary = await importFromArc(this.store, dir);
+    const summary = await importFromArc(this.store, dir, process.env.OPEN_ARC_FIRESTORE_DIR || undefined);
     if (summary) {
       w.lastSelected.clear();
       w.spaceId = this.store.state.spaces[0]!.id;
