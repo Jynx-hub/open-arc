@@ -5,7 +5,7 @@ import path from 'node:path';
 
 export async function launch(env: Record<string, string> = {}): Promise<{ app: ElectronApplication; ui: Page; userData: string }> {
   const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'open-arc-e2e-'));
-  const app = await electron.launch({ args: [path.resolve(__dirname, '..')], env: { ...process.env, OPEN_ARC_USER_DATA: userData, OPEN_ARC_FIRESTORE_DIR: path.join(userData, 'no-firestore'), ...env } as Record<string, string> });
+  const app = await electron.launch({ args: [path.resolve(__dirname, '..')], env: { ...process.env, OPEN_ARC_USER_DATA: userData, OPEN_ARC_FIRESTORE_DIR: path.join(userData, 'no-firestore'), OPEN_ARC_QUIET: '1', ...env } as Record<string, string> });
   const ui = await app.firstWindow();
   await ui.waitForSelector('.sidebar');
   return { app, ui, userData };

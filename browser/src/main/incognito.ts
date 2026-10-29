@@ -3,13 +3,14 @@
 import { WebContentsView, type ContextMenuParams, type Session, type WebContents } from 'electron';
 import { randomUUID } from 'node:crypto';
 import type { PrivateTab } from '../shared/ipc';
-import { privateSession } from './profiles';
+import { QUIET, privateSession } from './profiles';
 
 export interface PrivateHooks {
   /** Tabs, the selection, or a tab's title/URL/loading state changed. */
   changed(): void;
   contextMenu(wc: WebContents, params: ContextMenuParams): void;
   domReady(wc: WebContents): void;
+  fullscreen(wc: WebContents, on: boolean): void;
 }
 
 interface Entry {
@@ -29,7 +30,7 @@ export class PrivateTabs {
 
   create(url: string, { select = true } = {}): string {
     const id = randomUUID();
-    const view = new WebContentsView({ webPreferences: { session: this.ses, sandbox: true, contextIsolation: true, nodeIntegration: false } });
+    const view = new WebContentsView({ webPreferences: { session: this.ses, sandbox: true, contextIsolation: true, nodeIntegration: false, disableHtmlFullscreenWindowResize: QUIET } });
     view.setBorderRadius(8);
     view.setBackgroundColor('#ffffff');
     this.entries.unshift({ id, view });
@@ -96,6 +97,8 @@ export class PrivateTabs {
     }
     wc.on('dom-ready', () => this.hooks.domReady(wc));
     wc.on('context-menu', (_e, params) => this.hooks.contextMenu(wc, params));
+    wc.on('enter-html-full-screen', () => this.hooks.fullscreen(wc, true));
+    wc.on('leave-html-full-screen', () => this.hooks.fullscreen(wc, false));
     // Links that ask for a new tab or window open as another private tab here, never in a normal window.
     wc.setWindowOpenHandler(({ url, disposition }) => {
       this.create(url, { select: disposition !== 'background-tab' });

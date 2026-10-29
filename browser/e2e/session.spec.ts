@@ -138,3 +138,60 @@ test('automatic Picture in Picture can be turned off', async () => {
   expect(await inPage(app, `${base}/video`, '!!document.pictureInPictureElement')).toBe(false);
   await app.close();
 });
+
+// Tests run quiet (OPEN_ARC_QUIET), so the window itself never goes macOS fullscreen here; that part is
+// Electron's, and is checked by hand.
+test('a page going fullscreen fills the window; Escape or switching tabs brings the layout back', async () => {
+  const { app, ui } = await launch();
+  await ui.keyboard.press('Escape');
+  await openTab(ui, `${base}/cookie`, 'Cookie');
+  const s1 = await openTab(ui, `${base}/plain`, 'Plain');
+  const layout = () =>
+    app.evaluate(({ BrowserWindow }) => {
+      const win = BrowserWindow.getAllWindows()[0]!;
+      const [width, height] = win.getContentSize();
+      const views = win.contentView.children.filter((v) => 'webContents' in v) as Electron.WebContentsView[];
+      const b = views[0]!.getBounds();
+      return { views: views.length, fills: b.x === 0 && b.y === 0 && b.width === width && b.height === height, besideSidebar: b.x > 100 };
+    });
+  const isFull = () => inPage(app, `${base}/plain`, '!!document.fullscreenElement');
+  const enter = async () => {
+    await inPage(app, `${base}/plain`, 'document.documentElement.requestFullscreen()');
+    await expect.poll(layout, { timeout: 10_000 }).toEqual({ views: 1, fills: true, besideSidebar: false });
+  };
+  const normal = { views: 1, fills: false, besideSidebar: true };
+  expect(await layout()).toEqual(normal);
+
+  await enter();
+  await app.evaluate(({ webContents }, u) => {
+    const wc = webContents.getAllWebContents().find((w) => w.getURL().startsWith(u))!;
+    wc.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
+    wc.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' });
+  }, `${base}/plain`);
+  await expect.poll(isFull).toBe(false);
+  await expect.poll(layout, { timeout: 10_000 }).toEqual(normal);
+
+  // Leaving the tab takes its page out of fullscreen, so the window doesn't stay stuck there.
+  await enter();
+  const cookieTab = Object.values(s1.items).find((i: any) => i.tab?.savedTitle === 'Cookie')!.id;
+  await command(ui, { type: 'select', id: cookieTab });
+  await expect.poll(isFull).toBe(false);
+  await expect.poll(layout, { timeout: 10_000 }).toEqual(normal);
+  await app.close();
+});
+
+test('Print sends the current page to the print dialog', async () => {
+  const { app, ui } = await launch();
+  await ui.keyboard.press('Escape');
+  await openTab(ui, `${base}/plain`, 'Plain');
+  // The system print dialog can't be driven from a test: record the call instead.
+  await app.evaluate(({ webContents }) => {
+    const proto = Object.getPrototypeOf(webContents.getAllWebContents()[0]!);
+    proto.print = function (this: Electron.WebContents) {
+      (globalThis as any).printed = this.getURL();
+    };
+  });
+  await command(ui, { type: 'runAction', id: 'print' });
+  expect(await app.evaluate(() => (globalThis as any).printed)).toBe(`${base}/plain`);
+  await app.close();
+});

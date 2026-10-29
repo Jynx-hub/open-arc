@@ -20,6 +20,7 @@ export const KEY_ACTIONS: KeyAction[] = [
   { id: 'reopenClosed', label: 'Reopen Last Closed', accelerator: 'CmdOrCtrl+Shift+T', menu: 'File' },
   { id: 'focusURL', label: 'Edit Address…', accelerator: 'CmdOrCtrl+L', arcId: 'addressBar', menu: 'File' },
   { id: 'savePageAs', label: 'Save Page As…', accelerator: 'CmdOrCtrl+Shift+S', arcId: 'savePageAs', menu: 'File' },
+  { id: 'print', label: 'Print…', accelerator: 'CmdOrCtrl+P', arcId: 'printPage', menu: 'File' },
   { id: 'copyURL', label: 'Copy Address', accelerator: 'CmdOrCtrl+Shift+C', arcId: 'copyCurrentURL', menu: 'Edit' },
   { id: 'copyMarkdownLink', label: 'Copy as Markdown Link', accelerator: 'CmdOrCtrl+Shift+Alt+C', menu: 'Edit' },
   { id: 'find', label: 'Find in Page…', accelerator: 'CmdOrCtrl+F', arcId: 'find', menu: 'Edit' },

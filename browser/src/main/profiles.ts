@@ -4,6 +4,12 @@ import { randomUUID } from 'node:crypto';
 import type { State } from '../shared/model';
 import { rootOf } from '../shared/tree';
 
+/**
+ * Test runs stay out of the user's way: windows are invisible and never take focus, the app stays out of
+ * the Dock, and a fullscreen page fills its window without taking the whole screen.
+ */
+export const QUIET = process.env.OPEN_ARC_QUIET === '1';
+
 export interface SessionOptions {
   /** A Profile id, or the partition name of a private session. */
   profileId: string;

@@ -3,7 +3,7 @@
 import { WebContentsView, type ContextMenuParams, type WebContents } from 'electron';
 import type { LiveTab } from '../shared/ipc';
 import type { State } from '../shared/model';
-import { partitionFor, profileOfItem, sessionFor } from './profiles';
+import { QUIET, partitionFor, profileOfItem, sessionFor } from './profiles';
 import type { Store } from './store';
 
 export interface TabHooks {
@@ -15,6 +15,8 @@ export interface TabHooks {
   domReady(itemId: string, wc: WebContents): void;
   /** Right-click in the page. */
   contextMenu(itemId: string, wc: WebContents, params: ContextMenuParams): void;
+  /** The page entered or left fullscreen (a video's fullscreen button, `requestFullscreen()`). */
+  fullscreen(wc: WebContents, on: boolean): void;
   liveChanged(): void;
 }
 
@@ -54,7 +56,7 @@ export class TabViews {
     if (!item?.tab || !profileId) return null;
 
     const view = new WebContentsView({
-      webPreferences: { session: sessionFor(profileId), sandbox: true, contextIsolation: true, nodeIntegration: false },
+      webPreferences: { session: sessionFor(profileId), sandbox: true, contextIsolation: true, nodeIntegration: false, disableHtmlFullscreenWindowResize: QUIET },
     });
     view.setBorderRadius(8);
     view.setBackgroundColor('#ffffff');
@@ -158,6 +160,8 @@ export class TabViews {
     wc.on('media-paused', () => update({ playing: false }));
     wc.on('dom-ready', () => this.hooks.domReady(itemId, wc));
     wc.on('context-menu', (_e, params) => this.hooks.contextMenu(itemId, wc, params));
+    wc.on('enter-html-full-screen', () => this.hooks.fullscreen(wc, true));
+    wc.on('leave-html-full-screen', () => this.hooks.fullscreen(wc, false));
     wc.on('will-navigate', (e) => {
       if (this.hooks.willNavigate(itemId, e.url, wc)) e.preventDefault();
     });

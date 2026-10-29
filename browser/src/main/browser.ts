@@ -8,7 +8,7 @@ import { itemTitle, type Item, type Space, type State } from '../shared/model';
 import type { Action } from '../shared/reducer';
 import { isPersistent, rootOf, sectionOf, spaceOf, subtree } from '../shared/tree';
 import { KEY_ACTIONS, acceleratorFor } from '../shared/keymap';
-import { clearProfileData, sessionFor, setSessionSetup } from './profiles';
+import { QUIET, clearProfileData, sessionFor, setSessionSetup } from './profiles';
 import type { Store } from './store';
 import { TabViews } from './tabs';
 import { search } from '../shared/search';
@@ -37,7 +37,7 @@ const MEDIA_TOGGLE = `(() => {
 /** Actions that make sense in a private window; the rest act on Spaces and sidebar items, which it has none of. */
 const PRIVATE_ACTIONS = new Set([
   'commandBar', 'focusURL', 'newWindow', 'newIncognitoWindow', 'littleArc', 'closeTab', 'copyURL', 'copyMarkdownLink', 'reload', 'back', 'forward',
-  'zoomIn', 'zoomOut', 'zoomReset', 'devTools', 'toggleSidebar', 'find', 'savePageAs', 'nextTab', 'prevTab', 'settings',
+  'zoomIn', 'zoomOut', 'zoomReset', 'devTools', 'toggleSidebar', 'find', 'savePageAs', 'print', 'nextTab', 'prevTab', 'settings',
 ]);
 
 interface Win {
@@ -60,6 +60,11 @@ interface Win {
   little: WebContentsView | null;
   /** Private window: its tabs and throwaway session. */
   priv: PrivateTabs | null;
+  /**
+   * The page that is fullscreen in this window. `leaving`: the page has left, but the window is still
+   * animating out of macOS fullscreen; the page keeps the whole window until that finishes.
+   */
+  htmlFullscreen: { wc: WebContents; windowFollows: boolean; leaving: boolean } | null;
   /** UI actions queued until the window's UI says it is listening. */
   pending: UiEvents['action'][] | null;
   overlaySeq: number;
@@ -83,6 +88,7 @@ export class Browser {
       willNavigate: (itemId, url, wc) => this.maybePeek(itemId, url, wc),
       domReady: (_itemId, wc) => applyBoosts(this.store.state, wc),
       contextMenu: (itemId, wc, params) => this.pageContextMenu(wc, params, itemId),
+      fullscreen: (wc, on) => this.pageFullscreen(wc, on),
       liveChanged: () => this.scheduleLive(),
     });
     this.downloads = new Downloads(store, {
@@ -127,12 +133,21 @@ export class Browser {
     const spaceId = opts.spaceId ?? this.focused()?.spaceId ?? state.spaces[0]!.id;
     const w: Win = {
       win, kind, spaceId, selectedId: null, previousId: null, lastSelected: new Map(), bounds: { x: 0, y: 0, width: 0, height: 0 },
-      sidebarHidden: false, overlay: false, snapshots: null, attached: [], peek: null, peekBackdrop: null, little: null, priv: null, pending: [], overlaySeq: 0, peekSeq: 0,
+      sidebarHidden: false, overlay: false, snapshots: null, attached: [], peek: null, peekBackdrop: null, little: null, priv: null, htmlFullscreen: null, pending: [], overlaySeq: 0, peekSeq: 0,
     };
     this.wins.set(win.id, w);
     win.on('focus', () => (this.lastFocused = win.id));
     win.on('closed', () => this.onWindowClosed(w));
-    win.once('ready-to-show', () => win.show());
+    win.on('resize', () => {
+      if (w.htmlFullscreen?.leaving && !win.isFullScreen()) this.finishFullscreen(w);
+      else if (w.htmlFullscreen) this.layout(w);
+    });
+    win.on('leave-full-screen', () => this.finishFullscreen(w));
+    win.once('ready-to-show', () => {
+      if (!QUIET) return win.show();
+      win.setOpacity(0);
+      win.showInactive();
+    });
     void win.loadURL(`${this.rendererURL}#${kind}`);
 
     if (kind === 'little') {
@@ -156,6 +171,7 @@ export class Browser {
         },
         contextMenu: (wc, params) => this.pageContextMenu(wc, params, null),
         domReady: (wc) => applyBoosts(this.store.state, wc),
+        fullscreen: (wc, on) => this.pageFullscreen(wc, on),
       });
       if (opts.url) w.priv.create(opts.url);
       else this.sendUi(w, 'action', { id: 'commandBar' });
@@ -285,6 +301,39 @@ export class Browser {
     void wc.executeJavaScript(PIP_ENTER, true).then((ok) => ok && this.pipped.add(left)).catch(() => {});
   }
 
+  /**
+   * A page went fullscreen or came back: lay it out over the whole window, or back in its place.
+   * Electron itself takes the window into macOS fullscreen and out again (calling setFullScreen here
+   * too toggles it twice mid-animation, and the page never finishes leaving fullscreen).
+   */
+  private pageFullscreen(wc: WebContents, on: boolean) {
+    const w = this.winOf(wc);
+    if (!w || w.win.isDestroyed()) return;
+    if (on) {
+      // Electron takes the window fullscreen for the page unless it already was (then it stays after).
+      w.htmlFullscreen = { wc, windowFollows: w.htmlFullscreen?.windowFollows ?? !w.win.isFullScreen(), leaving: false };
+    } else if (w.htmlFullscreen?.wc === wc) {
+      if (w.htmlFullscreen.windowFollows && w.win.isFullScreen()) w.htmlFullscreen.leaving = true;
+      else w.htmlFullscreen = null;
+    }
+    this.layout(w);
+  }
+
+  /**
+   * The window is out of macOS fullscreen: put the page back in its place. A page only finishes leaving
+   * fullscreen when it sees its new size while attached, and Escape pressed during the animation into
+   * fullscreen can leave it stuck; asking it to exit (a no-op when it already has) settles both.
+   */
+  private finishFullscreen(w: Win) {
+    const left = w.htmlFullscreen;
+    if (left && !left.leaving && w.win.isFullScreen()) return;
+    w.htmlFullscreen = null;
+    for (const wc of new Set([...w.attached.map((v) => v.webContents), ...(left ? [left.wc] : [])])) {
+      if (!wc.isDestroyed()) void wc.executeJavaScript('document.fullscreenElement && document.exitFullscreen()', true).catch(() => {});
+    }
+    this.layout(w);
+  }
+
   /** The sidebar mini player's buttons. */
   private media(id: string, op: 'playPause' | 'mute') {
     const wc = this.tabs.get(id)?.webContents;
@@ -352,6 +401,17 @@ export class Browser {
         rects.push(r);
       });
     }
+    // A fullscreen page fills the whole window, over the sidebar, as the only view.
+    const fsWc = w.htmlFullscreen && !w.overlay && !w.htmlFullscreen.wc.isDestroyed() ? w.htmlFullscreen.wc : null;
+    const fsView = fsWc ? want.find((v) => v.webContents === fsWc) ?? w.attached.find((v) => v.webContents === fsWc) : undefined;
+    if (fsView) {
+      // Switched away from it: the page leaves fullscreen first, still attached (Electron ignores the exit
+      // of a detached page). Its leave event lays out the new selection.
+      if (!want.includes(fsView) && !w.htmlFullscreen!.leaving) void fsWc!.executeJavaScript('document.fullscreenElement && document.exitFullscreen()', true).catch(() => {});
+      const [width, height] = w.win.getContentSize();
+      want.splice(0, want.length, fsView);
+      rects.splice(0, rects.length, { x: 0, y: 0, width: width!, height: height! });
+    }
     for (const v of w.attached) if (!want.includes(v)) this.detach(w, v);
     want.forEach((v, i) => {
       if (!w.attached.includes(v)) {
@@ -361,6 +421,7 @@ export class Browser {
         w.attached.push(v);
       }
       v.setBounds(rects[i]!);
+      v.setBorderRadius(fsView ? 0 : 8);
     });
     if (w.peek && !w.overlay) {
       w.win.contentView.addChildView(w.peek.view); // re-adding raises it above the page
@@ -622,8 +683,10 @@ export class Browser {
     if (!w || w.kind !== 'main') w = this.createWindow();
     if (dest.kind === 'space') this.switchSpace(w, dest.spaceId);
     this.newTab(w, url);
-    w.win.show();
-    w.win.focus();
+    if (!QUIET) {
+      w.win.show();
+      w.win.focus();
+    }
   }
 
   littleToSpace(w: Win, spaceId: string) {
@@ -635,7 +698,7 @@ export class Browser {
     w.little?.webContents.close();
     w.little = null;
     w.win.close();
-    target.win.focus();
+    if (!QUIET) target.win.focus();
   }
 
   // ── commands ─────────────────────────────────────────────────────────────
@@ -862,6 +925,10 @@ export class Browser {
       case 'capture': return this.sendUi(w, 'action', { id: 'capture' });
       case 'find': return this.sendUi(w, 'action', { id: 'find' });
       case 'savePageAs': return void this.savePageAs(w);
+      case 'print':
+        return wc?.print({}, (ok, reason) => {
+          if (!ok && !/cancel/i.test(reason)) this.toast(w, 'Could not print the page');
+        });
       case 'toggleAutoPip': {
         const on = !state.settings.autoPictureInPicture;
         this.store.dispatch({ type: 'settings.update', patch: { autoPictureInPicture: on } });
