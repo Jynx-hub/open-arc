@@ -41,7 +41,7 @@ export class Store {
     this.saveTimer = null;
     fs.mkdirSync(path.dirname(this.file), { recursive: true });
     const tmp = `${this.file}.${process.pid}.tmp`;
-    fs.writeFileSync(tmp, JSON.stringify(this.state));
+    fs.writeFileSync(tmp, JSON.stringify(persisted(this.state)));
     fs.renameSync(tmp, this.file);
   }
 
@@ -66,6 +66,11 @@ export class Store {
     if (raw.version > STATE_VERSION) throw new StateTooNewError(raw.version);
     return migrate(raw);
   }
+}
+
+/** What goes to disk: State minus anything from a private window. */
+function persisted(state: State): State {
+  return state.downloads.some((d) => d.private) ? { ...state, downloads: state.downloads.filter((d) => !d.private) } : state;
 }
 
 export class StateTooNewError extends Error {

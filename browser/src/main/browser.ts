@@ -17,13 +17,20 @@ import { routeExternalUrl } from '../shared/routing';
 import { contextMenuTemplate, searchURL, type PageMenuEntry } from '../shared/contextMenu';
 import { Downloads } from './downloads';
 import { Permissions } from './permissions';
+import { PrivateTabs } from './incognito';
 
 const SPLIT_GAP = 6;
 const PEEK_INSET = 48;
 
+/** Actions that make sense in a private window; the rest act on Spaces and sidebar items, which it has none of. */
+const PRIVATE_ACTIONS = new Set([
+  'commandBar', 'focusURL', 'newWindow', 'newIncognitoWindow', 'littleArc', 'closeTab', 'copyURL', 'copyMarkdownLink', 'reload', 'back', 'forward',
+  'zoomIn', 'zoomOut', 'zoomReset', 'devTools', 'toggleSidebar', 'find', 'savePageAs', 'nextTab', 'prevTab', 'settings',
+]);
+
 interface Win {
   win: BrowserWindow;
-  kind: 'main' | 'little';
+  kind: 'main' | 'little' | 'incognito';
   spaceId: string;
   selectedId: string | null;
   /** The tab selected before the current one (⌃⇥ jumps back to it). */
@@ -39,6 +46,8 @@ interface Win {
   peekBackdrop: Snapshot[] | null;
   /** Little Arc: a standalone view that isn't in any Space until moved there. */
   little: WebContentsView | null;
+  /** Private window: its tabs and throwaway session. */
+  priv: PrivateTabs | null;
   /** UI actions queued until the window's UI says it is listening. */
   pending: UiEvents['action'][] | null;
   overlaySeq: number;
@@ -76,17 +85,18 @@ export class Browser {
         if (id) this.tabs.setCapturing(id, keys);
       },
     });
-    setSessionSetup((ses, profileId) => {
-      ses.on('will-download', (_e, item) => this.downloads.track(item, profileId));
+    setSessionSetup((ses, { profileId, private: isPrivate }) => {
+      if (isPrivate) this.permissions.markPrivate(ses);
+      ses.on('will-download', (_e, item) => this.downloads.track(item, profileId, isPrivate));
       ses.setPermissionRequestHandler((wc, permission, callback, details) => this.permissions.request(wc, permission, callback, details));
-      ses.setPermissionCheckHandler((_wc, permission, origin, details) => this.permissions.check(permission, origin, details));
+      ses.setPermissionCheckHandler((_wc, permission, origin, details) => this.permissions.check(ses, permission, origin, details));
     });
     store.subscribe((state, prev) => this.onState(state, prev));
   }
 
   // ── windows ──────────────────────────────────────────────────────────────
 
-  createWindow(opts: { kind?: 'main' | 'little'; spaceId?: string; url?: string } = {}): Win {
+  createWindow(opts: { kind?: Win['kind']; spaceId?: string; url?: string } = {}): Win {
     const kind = opts.kind ?? 'main';
     const state = this.store.state;
     const win = new BrowserWindow({
@@ -96,14 +106,14 @@ export class Browser {
       minHeight: 320,
       titleBarStyle: 'hiddenInset',
       trafficLightPosition: { x: 14, y: 14 },
-      backgroundColor: '#e9e7f5',
+      backgroundColor: kind === 'incognito' ? '#1e1d24' : '#e9e7f5',
       show: false,
       webPreferences: { preload: path.join(__dirname, 'preload.cjs'), sandbox: true, contextIsolation: true },
     });
     const spaceId = opts.spaceId ?? this.focused()?.spaceId ?? state.spaces[0]!.id;
     const w: Win = {
       win, kind, spaceId, selectedId: null, previousId: null, lastSelected: new Map(), bounds: { x: 0, y: 0, width: 0, height: 0 },
-      sidebarHidden: false, overlay: false, snapshots: null, attached: [], peek: null, peekBackdrop: null, little: null, pending: [], overlaySeq: 0, peekSeq: 0,
+      sidebarHidden: false, overlay: false, snapshots: null, attached: [], peek: null, peekBackdrop: null, little: null, priv: null, pending: [], overlaySeq: 0, peekSeq: 0,
     };
     this.wins.set(win.id, w);
     win.on('focus', () => (this.lastFocused = win.id));
@@ -124,6 +134,17 @@ export class Browser {
       });
       if (opts.url) void view.webContents.loadURL(opts.url);
       this.layout(w);
+    } else if (kind === 'incognito') {
+      w.priv = new PrivateTabs({
+        changed: () => {
+          this.layout(w);
+          this.pushWindow(w);
+        },
+        contextMenu: (wc, params) => this.pageContextMenu(wc, params, null),
+        domReady: (wc) => applyBoosts(this.store.state, wc),
+      });
+      if (opts.url) w.priv.create(opts.url);
+      else this.sendUi(w, 'action', { id: 'commandBar' });
     } else {
       this.selectDefaultForSpace(w);
     }
@@ -157,6 +178,7 @@ export class Browser {
       zoom: selectedView ? selectedView.webContents.getZoomFactor() : 1,
       // The focused page first, then the other Split View panes, so no visible page waits on a hidden prompt.
       permissionPrompt: this.permissions.promptFor([this.activeContents(w), ...w.attached.map((v) => v.webContents)].filter((x): x is WebContents => !!x)),
+      private: w.priv ? { tabs: w.priv.tabs(), selectedId: w.priv.selectedId } : null,
     };
   }
 
@@ -174,6 +196,10 @@ export class Browser {
       wc.close();
     }
     if (w.peek) w.peek.view.webContents.close();
+    if (w.priv) {
+      this.downloads.forgetPrivate(w.priv.partition);
+      void w.priv.destroy();
+    }
   }
 
   /** Closed Little Arc pages land in the Archive with source "littleArc". */
@@ -265,6 +291,12 @@ export class Browser {
     if (w.little) {
       want.push(w.little);
       rects.push(b);
+    } else if (w.priv) {
+      const view = w.overlay ? null : w.priv.selected();
+      if (view) {
+        want.push(view);
+        rects.push(b);
+      }
     } else if (!w.overlay && !w.peek) {
       const ids = this.visibleIds(w);
       const state = this.store.state;
@@ -343,6 +375,13 @@ export class Browser {
   }
 
   open(w: Win, url: string, where: Command & { type: 'open' } extends { where: infer W } ? W : never, parentId?: string) {
+    // A private window keeps everything it opens to itself, as private tabs.
+    if (w.priv) {
+      const view = where === 'current' ? w.priv.selected() : null;
+      if (view) void view.webContents.loadURL(url);
+      else w.priv.create(url);
+      return;
+    }
     switch (where) {
       case 'current': {
         const view = w.selectedId ? this.tabs.get(w.selectedId) : null;
@@ -509,8 +548,7 @@ export class Browser {
   // ── pages asking for new tabs ────────────────────────────────────────────
 
   private openFromPage(itemId: string, url: string, disposition: string) {
-    const w = [...this.wins.values()].find((x) => x.attached.some((v) => v === this.tabs.get(itemId))) ?? this.focused();
-    if (!w) return;
+    const w = [...this.wins.values()].find((x) => x.attached.some((v) => v === this.tabs.get(itemId))) ?? this.mainWindow(this.focused());
     const state = this.store.state;
     const space = spaceOf(state, itemId) ?? this.currentSpace(w);
     if (disposition === 'new-window') {
@@ -574,7 +612,7 @@ export class Browser {
         for (const a of queued) this.sendUi(w, 'action', a);
         return;
       }
-      case 'select': return this.select(w, c.id);
+      case 'select': return w.priv ? w.priv.select(c.id) : this.select(w, c.id);
       case 'switchSpace': return this.switchSpace(w, c.spaceId);
       case 'open': return this.open(w, c.url, c.where, c.parentId);
       case 'navigate': {
@@ -586,7 +624,7 @@ export class Browser {
         else wc.stop();
         return;
       }
-      case 'close': return this.close(w, c.id);
+      case 'close': return w.priv ? w.priv.close(c.id) : this.close(w, c.id);
       case 'unload': {
         const next = w.selectedId === c.id ? this.neighbor(w, c.id) : undefined;
         this.tabs.unload(c.id);
@@ -598,8 +636,14 @@ export class Browser {
       case 'overlay': return this.setOverlay(w, c.open);
       case 'contextMenu': return this.contextMenu(w, c.target);
       case 'runAction': return this.runAction(w, c.id);
-      case 'search': return search(this.store.state, this.tabs.live, c.query, w.spaceId);
-      case 'pickResult': return this.store.dispatch({ type: 'ranking.pick', query: c.query, key: c.key, now: Date.now() });
+      case 'search': {
+        const results = search(this.store.state, this.tabs.live, c.query, w.spaceId);
+        // A private window offers addresses and searches only: no tabs, history or actions from the normal Spaces.
+        return w.priv ? results.filter((r) => r.kind === 'url' || r.kind === 'search' || r.kind === 'siteSearch') : results;
+      }
+      case 'pickResult':
+        if (w.priv) return;
+        return this.store.dispatch({ type: 'ranking.pick', query: c.query, key: c.key, now: Date.now() });
       case 'importArc': return this.importArc(w, c.dir);
       case 'peek': return c.op === 'close' ? this.closePeek(w) : this.expandPeek(w);
       case 'little': return this.littleToSpace(w, c.spaceId);
@@ -623,6 +667,7 @@ export class Browser {
   private activeContents(w: Win): WebContents | null {
     if (w.peek) return w.peek.view.webContents;
     if (w.little) return w.little.webContents;
+    if (w.priv) return w.priv.selected()?.webContents ?? null;
     return w.selectedId ? this.tabs.get(w.selectedId)?.webContents ?? null : null;
   }
 
@@ -631,7 +676,18 @@ export class Browser {
     if (!w) {
       if (id === 'newWindow' || id === 'commandBar') this.createWindow();
       if (id === 'littleArc') this.createWindow({ kind: 'little' });
+      if (id === 'newIncognitoWindow') this.createWindow({ kind: 'incognito' });
       return;
+    }
+    if (w.priv) {
+      if (!PRIVATE_ACTIONS.has(id)) return;
+      const ids = w.priv.ids();
+      const at = w.priv.selectedId ? ids.indexOf(w.priv.selectedId) : -1;
+      if (id === 'closeTab') return w.priv.selectedId ? w.priv.close(w.priv.selectedId) : w.win.close();
+      if (id === 'nextTab' || id === 'prevTab') {
+        const next = ids[(at + (id === 'nextTab' ? 1 : -1) + ids.length) % ids.length];
+        return next ? w.priv.select(next) : undefined;
+      }
     }
     const state = this.store.state;
     const wc = this.activeContents(w);
@@ -655,6 +711,7 @@ export class Browser {
     }
     switch (id) {
       case 'newWindow': return void this.createWindow();
+      case 'newIncognitoWindow': return void this.createWindow({ kind: 'incognito' });
       case 'newBlankWindow': {
         const nw = this.createWindow();
         nw.selectedId = null;
@@ -959,6 +1016,7 @@ export class Browser {
       canGoBack: wc.navigationHistory.canGoBack(),
       canGoForward: wc.navigationHistory.canGoForward(),
       canSplit: !!itemId && this.store.state.items[itemId]?.kind === 'tab',
+      isPrivate: !!w.priv,
     });
     const template = entries.map((e): MenuItemConstructorOptions => {
       if (e.id === 'separator') return { type: 'separator' };
@@ -970,6 +1028,11 @@ export class Browser {
 
   private runPageMenu(w: Win, wc: WebContents, itemId: string | null, p: ContextMenuParams, e: PageMenuEntry) {
     if (wc.isDestroyed()) return;
+    if (w.priv) {
+      // Whatever a private page opens stays in its private window.
+      if (e.id === 'openLinkNewTab' || e.id === 'openImageNewTab') return void w.priv.create(e.id === 'openLinkNewTab' ? p.linkURL : p.srcURL, { select: false });
+      if (e.id === 'searchSelection') return void w.priv.create(searchURL(this.store.state.settings.searchTemplate, p.selectionText));
+    }
     switch (e.id) {
       // From Peek or a mini window the new tab still lands in a main window's sidebar, where it can be seen.
       case 'openLinkNewTab': return void this.backgroundTab(this.currentSpace(this.mainWindow(w)), p.linkURL);

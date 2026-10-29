@@ -243,3 +243,14 @@ kbd { font: 11px ui-monospace, monospace; opacity: 0.8; margin-left: 6px; }
 .progress-ring circle { fill: none; stroke-width: 2; }
 .progress-ring .track { stroke: var(--line); }
 .progress-ring .fill { stroke: var(--space); transition: stroke-dashoffset 200ms linear; }
+
+/* ── private window ── */
+.app.kind-incognito {
+  --ink: #ecebf2; --ink-2: #b4b1c2; --ink-3: #85829a; --hover: rgba(255, 255, 255, 0.08); --selected: rgba(255, 255, 255, 0.16); --line: rgba(255, 255, 255, 0.12);
+  background: linear-gradient(160deg, #2a2833 0%, #1c1b22 100%); color: var(--ink);
+}
+.app.kind-incognito .url-pill { background: rgba(255, 255, 255, 0.08); }
+.app.kind-incognito .url-pill:hover { background: rgba(255, 255, 255, 0.14); }
+.app.kind-incognito .empty-content { background: #26252d; }
+.private-label { margin: 10px 8px 2px; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-3); }
+.private-tab { padding-left: 8px; }

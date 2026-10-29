@@ -27,6 +27,10 @@ describe('page context menu', () => {
     expect(ids({ linkURL: 'https://a.test/' }, { ...caps, canSplit: false })).not.toContain('openLinkSplit');
   });
 
+  it('private window: links never open in a mini window (it would use a normal Profile)', () => {
+    expect(ids({ linkURL: 'https://a.test/' }, { ...caps, canSplit: false, isPrivate: true })).toEqual(['openLinkNewTab', 'copyLink', 'saveLinkAs', 'separator', 'inspect']);
+  });
+
   it('image inside a link gets both groups', () => {
     const out = ids({ linkURL: 'https://a.test/', mediaType: 'image', srcURL: 'https://a.test/i.png' });
     expect(out).toContain('openLinkNewTab');

@@ -162,6 +162,8 @@ export interface DownloadEntry {
   startedAt: number;
   endedAt: number | null;
   profileId: string;
+  /** From a private window: never written to disk, and dropped when that window closes. */
+  private?: boolean;
 }
 
 /** Command Bar learning (spec/features/command-bar.md › Ranking). */

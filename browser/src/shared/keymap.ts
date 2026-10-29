@@ -15,6 +15,7 @@ export const KEY_ACTIONS: KeyAction[] = [
   { id: 'newWindow', label: 'New Window', accelerator: 'CmdOrCtrl+N', arcId: 'newWindow', menu: 'File' },
   { id: 'newBlankWindow', label: 'New Blank Window', accelerator: 'Ctrl+CmdOrCtrl+N', arcId: 'newBlankWindow', menu: 'File' },
   { id: 'littleArc', label: 'New Mini Window', accelerator: 'CmdOrCtrl+Alt+N', arcId: 'showLittleArc', menu: 'File' },
+  { id: 'newIncognitoWindow', label: 'New Private Window', accelerator: 'CmdOrCtrl+Shift+N', menu: 'File' },
   { id: 'closeTab', label: 'Close Tab', accelerator: 'CmdOrCtrl+W', menu: 'File' },
   { id: 'reopenClosed', label: 'Reopen Last Closed', accelerator: 'CmdOrCtrl+Shift+T', menu: 'File' },
   { id: 'focusURL', label: 'Edit Address…', accelerator: 'CmdOrCtrl+L', arcId: 'addressBar', menu: 'File' },

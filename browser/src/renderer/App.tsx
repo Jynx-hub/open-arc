@@ -6,6 +6,7 @@ import { CommandBar, type CommandBarMode } from './components/CommandBar';
 import { ArchiveEducation, BoostEditor, ConfirmDialog, Library, LiveFolderDialog, Settings, SpaceEditor, SpaceManager, Welcome } from './components/Overlays';
 import { EaselView, NoteEditor } from './components/Editors';
 import { PermissionPromptCard } from './components/Site';
+import { PrivateSidebar } from './components/PrivateSidebar';
 
 type Overlay =
   | { name: 'commandBar'; mode: CommandBarMode; initial: string }
@@ -22,7 +23,7 @@ type Overlay =
 
 const SPLIT_GAP = 6;
 
-export function App({ kind }: { kind: 'main' | 'little' }) {
+export function App({ kind }: { kind: 'main' | 'little' | 'incognito' }) {
   const { state, win, live } = useAppState();
   const [overlay, setOverlayState] = useState<Overlay | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -39,17 +40,18 @@ export function App({ kind }: { kind: 'main' | 'little' }) {
 
   const openCommandBar = useCallback(
     (mode: CommandBarMode) => {
-      const url = mode === 'current' && win?.selectedId ? live[win.selectedId]?.url ?? '' : '';
+      const privateUrl = win?.private?.tabs.find((t) => t.id === win.private?.selectedId)?.url;
+      const url = mode !== 'current' ? '' : win?.selectedId ? live[win.selectedId]?.url ?? '' : privateUrl ?? win?.little?.url ?? '';
       setOverlay({ name: 'commandBar', mode, initial: url });
     },
-    [setOverlay, win?.selectedId, live],
+    [setOverlay, win?.selectedId, win?.private, win?.little?.url, live],
   );
 
   const runUiAction = useCallback(
     (id: string, arg?: string) => {
       switch (id) {
         case 'commandBar': return openCommandBar(arg === 'split' ? 'split' : 'new');
-        case 'focusURL': return openCommandBar(kind === 'little' ? 'current' : 'current');
+        case 'focusURL': return openCommandBar('current');
         case 'library': return setOverlay({ name: 'library' });
         case 'archive': return setOverlay({ name: 'library', tab: 'archive' });
         case 'history': return setOverlay({ name: 'library', tab: 'history' });
@@ -107,6 +109,7 @@ export function App({ kind }: { kind: 'main' | 'little' }) {
   const space = state.spaces.find((s) => s.id === win.spaceId) ?? state.spaces[0]!;
   const selected = win.selectedId ? state.items[win.selectedId] : null;
   const selectedUrl = win.selectedId ? live[win.selectedId]?.url ?? selected?.tab?.savedURL ?? null : win.little?.url ?? null;
+  const privateTab = win.private?.tabs.find((t) => t.id === win.private?.selectedId) ?? null;
   const parent = selected?.parentId ? state.items[selected.parentId] : null;
   const split = parent?.kind === 'split' ? parent : null;
 
@@ -140,9 +143,14 @@ export function App({ kind }: { kind: 'main' | 'little' }) {
           {toastStack}
         </Sidebar>
       )}
+      {kind === 'incognito' && !win.sidebarHidden && (
+        <PrivateSidebar win={win} openCommandBar={openCommandBar}>
+          {toastStack}
+        </PrivateSidebar>
+      )}
       <main className="content">
         {kind === 'little' && <LittleBar state={state} url={win.little?.url ?? ''} title={win.little?.title ?? ''} onEdit={() => openCommandBar('current')} />}
-        {kind === 'main' && win.sidebarHidden && <div className="hidden-sidebar-strip" onMouseEnter={() => api.command({ type: 'runAction', id: 'toggleSidebar' })} />}
+        {kind !== 'little' && win.sidebarHidden && <div className="hidden-sidebar-strip" onMouseEnter={() => api.command({ type: 'runAction', id: 'toggleSidebar' })} />}
         {win.permissionPrompt && (kind === 'little' || win.sidebarHidden) && <PermissionPromptCard prompt={win.permissionPrompt} bar />}
         {findOpen && <FindBar onClose={() => { setFindOpen(false); void api.find(''); }} />}
         <div className="viewport" ref={viewport}>
@@ -159,6 +167,12 @@ export function App({ kind }: { kind: 'main' | 'little' }) {
           {split && !win.snapshots && <SplitDividers split={split} viewport={viewport} />}
           {selected?.kind === 'note' && <NoteEditor item={selected} />}
           {selected?.kind === 'easel' && <EaselView item={selected} />}
+          {kind === 'incognito' && !privateTab && !win.snapshots && (
+            <div className="empty-content">
+              <p>This is a private window. Pages you open here leave no history, cookies or site data behind once it closes.</p>
+              <button className="primary" onClick={() => openCommandBar('new')}>New Tab <kbd>⌘T</kbd></button>
+            </div>
+          )}
           {kind === 'main' && !selected && !win.snapshots && (
             <div className="empty-content">
               <p>No tab open in {space.title}.</p>

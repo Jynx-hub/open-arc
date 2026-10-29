@@ -1,9 +1,9 @@
 // Site permission requests from every Profile's session. Saved answers and the always-allowed set
 // decide most requests at once; the rest wait in a per-page queue until the user answers the prompt.
-import { systemPreferences, type PermissionCheckHandlerHandlerDetails, type WebContents } from 'electron';
+import { systemPreferences, type PermissionCheckHandlerHandlerDetails, type Session, type WebContents } from 'electron';
 import { randomUUID } from 'node:crypto';
 import type { PermissionPrompt } from '../shared/ipc';
-import { decide, originOf, permissionKeys } from '../shared/permissions';
+import { decide, originOf, permissionKeys, type SavedPermissions } from '../shared/permissions';
 import type { Store } from './store';
 
 interface Pending extends PermissionPrompt {
@@ -23,8 +23,24 @@ const MEDIA = ['camera', 'microphone'] as const;
 export class Permissions {
   private queues = new Map<WebContents, Pending[]>();
   private watched = new WeakSet<WebContents>();
+  /** Private sessions remember answers only until their window closes, never in settings. */
+  private privateAnswers = new WeakMap<Session, SavedPermissions>();
 
   constructor(private store: Store, private hooks: PermissionHooks) {}
+
+  markPrivate(ses: Session) {
+    this.privateAnswers.set(ses, {});
+  }
+
+  private saved(ses: Session | undefined): SavedPermissions {
+    return (ses && this.privateAnswers.get(ses)) ?? this.store.state.settings.sitePermissions;
+  }
+
+  private save(ses: Session, origin: string, key: string, decision: 'allow' | 'deny') {
+    const mem = this.privateAnswers.get(ses);
+    if (mem) mem[origin] = { ...mem[origin], [key]: decision };
+    else this.store.dispatch({ type: 'sitePermission.set', origin, permission: key, decision });
+  }
 
   request(wc: WebContents, permission: string, callback: (granted: boolean) => void, details: { requestingUrl?: string; mediaTypes?: string[] }) {
     let fired = false;
@@ -35,7 +51,7 @@ export class Permissions {
     };
     const origin = originOf(details.requestingUrl || wc.getURL());
     const keys = permissionKeys(permission, details.mediaTypes);
-    const decision = decide(this.store.state.settings.sitePermissions, origin ?? '', keys);
+    const decision = decide(this.saved(wc.session), origin ?? '', keys);
     if (decision === 'allow') return void this.grant(wc, keys, resolve);
     if (decision === 'deny' || !origin) return resolve(false);
 
@@ -47,9 +63,9 @@ export class Permissions {
   }
 
   /** Synchronous checks (`navigator.permissions.query`, feature detection) see only what is already allowed. */
-  check(permission: string, requestingOrigin: string, details: PermissionCheckHandlerHandlerDetails): boolean {
+  check(ses: Session, permission: string, requestingOrigin: string, details: PermissionCheckHandlerHandlerDetails): boolean {
     const media = details.mediaType && details.mediaType !== 'unknown' ? [details.mediaType] : undefined;
-    return decide(this.store.state.settings.sitePermissions, originOf(requestingOrigin) ?? '', permissionKeys(permission, media)) === 'allow';
+    return decide(this.saved(ses), originOf(requestingOrigin) ?? '', permissionKeys(permission, media)) === 'allow';
   }
 
   /** The prompt to show for a window: the first page in `wcs` (most important first) with a request waiting. */
@@ -70,11 +86,7 @@ export class Permissions {
     for (const [wc, queue] of this.queues) {
       const answered = queue.find((p) => p.id === id);
       if (!answered) continue;
-      if (answer !== 'once') {
-        for (const key of answered.keys) {
-          this.store.dispatch({ type: 'sitePermission.set', origin: answered.origin, permission: key, decision: answer === 'allow' ? 'allow' : 'deny' });
-        }
-      }
+      if (answer !== 'once') for (const key of answered.keys) this.save(wc.session, answered.origin, key, answer === 'allow' ? 'allow' : 'deny');
       // The same question asked again while the prompt was up gets the same answer.
       const same = (p: Pending) => p.origin === answered.origin && p.keys.join() === answered.keys.join();
       const rest = queue.filter((p) => !same(p));
@@ -89,7 +101,7 @@ export class Permissions {
 
   /** Re-check the waiting requests against saved answers; the first one still undecided becomes the prompt. */
   private settle(wc: WebContents, queue: Pending[]) {
-    const saved = this.store.state.settings.sitePermissions;
+    const saved = this.saved(wc.isDestroyed() ? undefined : wc.session);
     const waiting: Pending[] = [];
     for (const p of queue) {
       const d = decide(saved, p.origin, p.keys);

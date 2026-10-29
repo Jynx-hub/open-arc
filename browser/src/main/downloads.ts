@@ -42,7 +42,7 @@ export class Downloads {
     wc.downloadURL(url);
   }
 
-  track(item: DownloadItem, profileId: string) {
+  track(item: DownloadItem, profileId: string, isPrivate = false) {
     const id = randomUUID();
     const url = item.getURL();
     const dir = this.dir();
@@ -60,6 +60,7 @@ export class Downloads {
     const entry: DownloadEntry = {
       id, url, filename: item.getFilename(), path: item.getSavePath(), mime: item.getMimeType(),
       totalBytes: item.getTotalBytes(), receivedBytes: 0, state: 'progressing', startedAt: Date.now(), endedAt: null, profileId,
+      ...(isPrivate ? { private: true } : {}),
     };
     this.store.dispatch({ type: 'download.upsert', entry });
 
@@ -105,6 +106,14 @@ export class Downloads {
     return entry;
   }
 
+  /** A private window closed: stop its running downloads and drop its entries (finished files stay on disk). */
+  forgetPrivate(profileId: string) {
+    for (const d of this.store.state.downloads.filter((x) => x.private && x.profileId === profileId)) {
+      this.store.dispatch({ type: 'download.remove', id: d.id });
+      this.items.get(d.id)?.cancel();
+    }
+  }
+
   async run(op: DownloadOp, id: string) {
     const entry = this.store.state.downloads.find((d) => d.id === id);
     const item = this.items.get(id);
@@ -132,7 +141,8 @@ export class Downloads {
         }
         item?.cancel();
         this.store.dispatch({ type: 'download.remove', id });
-        return sessionFor(entry.profileId).downloadURL(entry.url);
+        // A private window's session is gone once it closes; its downloads can't be retried.
+        return entry.private ? undefined : sessionFor(entry.profileId).downloadURL(entry.url);
       case 'remove':
         // Removing a running download stops it; the file of a finished one stays on disk.
         this.store.dispatch({ type: 'download.remove', id });

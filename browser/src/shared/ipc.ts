@@ -15,6 +15,16 @@ export interface LiveTab {
   capturing?: string[];
 }
 
+/** A tab in a private window. Kept out of State, so the sidebar gets these through WindowInfo. */
+export interface PrivateTab {
+  id: string;
+  url: string;
+  title: string;
+  loading: boolean;
+  canGoBack: boolean;
+  canGoForward: boolean;
+}
+
 export interface Rect {
   x: number;
   y: number;
@@ -29,7 +39,7 @@ export interface Snapshot {
 
 export interface WindowInfo {
   id: number;
-  kind: 'main' | 'little';
+  kind: 'main' | 'little' | 'incognito';
   spaceId: string;
   selectedId: string | null;
   sidebarHidden: boolean;
@@ -41,6 +51,8 @@ export interface WindowInfo {
   zoom: number;
   /** A site asking for a permission in the page this window shows. One at a time; others wait. */
   permissionPrompt: PermissionPrompt | null;
+  /** Private window: its tabs, which are not sidebar items. */
+  private: { tabs: PrivateTab[]; selectedId: string | null } | null;
 }
 
 export interface PermissionPrompt {

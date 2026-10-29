@@ -1,14 +1,29 @@
 // Profile → Electron session. Each Profile has its own persistent cookies, storage and cache.
 import { session, type Session } from 'electron';
+import { randomUUID } from 'node:crypto';
 import type { State } from '../shared/model';
 import { rootOf } from '../shared/tree';
 
+export interface SessionOptions {
+  /** A Profile id, or the partition name of a private session. */
+  profileId: string;
+  /** Private (incognito) sessions keep nothing: no saved permission answers, no download list on disk. */
+  private: boolean;
+}
+
 const configured = new Set<string>();
-let setup: ((ses: Session, profileId: string) => void) | null = null;
+let setup: ((ses: Session, opts: SessionOptions) => void) | null = null;
 
 /** Per-session wiring that needs the app's services (downloads, permissions). Set once, before any window opens. */
-export function setSessionSetup(fn: (ses: Session, profileId: string) => void) {
+export function setSessionSetup(fn: (ses: Session, opts: SessionOptions) => void) {
   setup = fn;
+}
+
+/** The wiring every session gets, Profile or private. */
+function configureSession(ses: Session, opts: SessionOptions) {
+  // Some sites refuse unfamiliar browsers; present a plain Chrome user agent.
+  ses.setUserAgent(ses.getUserAgent().replace(/\s(Electron|open-arc-browser)\/\S+/g, ''));
+  setup?.(ses, opts);
 }
 
 export function partitionFor(profileId: string): string {
@@ -20,11 +35,17 @@ export function sessionFor(profileId: string): Session {
   const ses = session.fromPartition(partition);
   if (!configured.has(partition)) {
     configured.add(partition);
-    // Some sites refuse unfamiliar browsers; present a plain Chrome user agent.
-    ses.setUserAgent(ses.getUserAgent().replace(/\s(Electron|open-arc-browser)\/\S+/g, ''));
-    setup?.(ses, profileId);
+    configureSession(ses, { profileId, private: false });
   }
   return ses;
+}
+
+/** A fresh in-memory session for one private window. Without the `persist:` prefix nothing reaches disk. */
+export function privateSession(): { ses: Session; partition: string } {
+  const partition = `incognito-${randomUUID()}`;
+  const ses = session.fromPartition(partition);
+  configureSession(ses, { profileId: partition, private: true });
+  return { ses, partition };
 }
 
 /** The Profile an item's page should load in: its Space's Profile, or the Favorites row's owner. */

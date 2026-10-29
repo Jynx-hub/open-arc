@@ -18,6 +18,8 @@ export interface PageMenuCaps {
   canGoForward: boolean;
   /** Split View needs a sidebar tab to split with; Peek and mini windows don't have one. */
   canSplit: boolean;
+  /** A private window's pages open links only as private tabs (no mini window, which would use a normal Profile). */
+  isPrivate?: boolean;
 }
 
 export type PageMenuId =
@@ -48,7 +50,7 @@ export function contextMenuTemplate(p: PageMenuParams, caps: PageMenuCaps): Page
     groups.push([
       { id: 'openLinkNewTab', label: 'Open Link in New Tab' },
       ...(caps.canSplit ? [{ id: 'openLinkSplit', label: 'Open Link Side by Side' } as PageMenuEntry] : []),
-      { id: 'openLinkLittle', label: 'Open Link in Mini Window' },
+      ...(caps.isPrivate ? [] : [{ id: 'openLinkLittle', label: 'Open Link in Mini Window' } as PageMenuEntry]),
       { id: 'copyLink', label: 'Copy Link' },
       { id: 'saveLinkAs', label: 'Download Link As…' },
     ]);

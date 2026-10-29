@@ -52,7 +52,8 @@ export function SitePermissionList({ state, origin }: { state: State; origin?: s
 export function useDownloads(state: State): DownloadEntry[] {
   const [progress, setProgress] = useState<UiEvents['downloadProgress']>({});
   useUiEvent('downloadProgress', setProgress);
-  return state.downloads.map((d) => (d.state === 'progressing' && progress[d.id] ? { ...d, ...progress[d.id] } : d));
+  // A private window's downloads are never listed: they leave no trace in the normal windows.
+  return state.downloads.filter((d) => !d.private).map((d) => (d.state === 'progressing' && progress[d.id] ? { ...d, ...progress[d.id] } : d));
 }
 
 export function DownloadsList({ state, limit }: { state: State; limit?: number }) {
