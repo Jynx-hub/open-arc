@@ -5,6 +5,7 @@ import { isAncestor } from '../../shared/tree';
 import { api, dispatch, faviconFor, hostOf } from '../api';
 import { originOf } from '../../shared/permissions';
 import { DownloadsList, PermissionPromptCard, SitePermissionList, downloadProgress, useDownloads } from './Site';
+import { ExtensionsPanel, PinnedExtensions } from './Extensions';
 
 const DRAG_TYPE = 'application/x-openarc-item';
 
@@ -29,7 +30,7 @@ export function Sidebar(p: Props) {
   const todayRoot = state.items[space.todayRootId];
   const selected = win.selectedId ? p.live[win.selectedId] : undefined;
   const swipe = useRef({ dx: 0, at: 0 });
-  const [panel, setPanel] = useState<'site' | 'downloads' | null>(null);
+  const [panel, setPanel] = useState<'site' | 'downloads' | 'extensions' | null>(null);
   const origin = selected ? originOf(selected.url) : null;
 
   // Two-finger horizontal swipe switches Spaces.
@@ -67,7 +68,11 @@ export function Sidebar(p: Props) {
           {!!selected?.capturing?.length && <span className="capture-dot" title={`Using your ${selected.capturing.join(' and ')}`}>●</span>}
         </button>
         <button className={`icon-btn site-btn ${panel === 'site' ? 'on' : ''}`} title="Site settings" disabled={!origin} onClick={() => setPanel(panel === 'site' ? null : 'site')}>⚙︎</button>
+        {win.extensionPartition && (
+          <button className={`icon-btn ext-btn ${panel === 'extensions' ? 'on' : ''}`} title="Extensions" onClick={() => setPanel(panel === 'extensions' ? null : 'extensions')}>⧉</button>
+        )}
       </div>
+      <PinnedExtensions state={state} win={win} />
 
       {win.permissionPrompt && <PermissionPromptCard prompt={win.permissionPrompt} />}
       {panel === 'site' && origin && (
@@ -75,6 +80,9 @@ export function Sidebar(p: Props) {
           <header><span className="ellipsis">{hostOf(origin)}</span><button className="icon-btn" onClick={() => setPanel(null)}>×</button></header>
           <SitePermissionList state={state} origin={origin} />
         </div>
+      )}
+      {panel === 'extensions' && (
+        <ExtensionsPanel state={state} win={win} onClose={() => setPanel(null)} openLibrary={() => { setPanel(null); p.openOverlay('extensions'); }} />
       )}
 
       {favRoot && (

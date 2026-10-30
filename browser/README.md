@@ -40,4 +40,12 @@ On first launch it offers to import from Arc. Only the three files `arc-export` 
 | notes-easels-library | Local Markdown Notes, a local canvas for Easels (strokes, text, pasted images), area Captures, Library |
 | keybindings | Defaults from `spec/formats/keybindings.md` (provisional there), user overrides with conflict handling |
 
+Beyond the specs, the usual browser basics: page context menu, downloads, site permissions, private windows, Picture in Picture and a mini player, print, page fullscreen, and Chrome extensions.
+
+## Chrome extensions
+
+Extensions install from the Chrome Web Store ("Add to Chrome" asks first, listing what the extension can do). Each Profile has its own set, kept in `<userData>/Extensions/<profile>/`. Library › Extensions turns them off (the folder moves to `Extensions (disabled)/`), removes them, and lists the ones installed in Arc, by name only, to reinstall from the store. Pinned toolbar buttons sit under the address. Private windows run no extensions.
+
+The `chrome.*` APIs come from [`electron-chrome-extensions`](https://www.npmjs.com/package/electron-chrome-extensions) (MIT since 4.10.0) and store installs and updates from [`electron-chrome-web-store`](https://www.npmjs.com/package/electron-chrome-web-store) (MIT). Both stay unbundled in `node_modules` because they locate their own page preloads. Set `OPEN_ARC_NO_EXTENSION_UPDATES=1` to skip update checks (the e2e suite does).
+
 Not reproduced, per spec: telemetry, cloud sync, AI features, and sharing that depended on Arc's servers.

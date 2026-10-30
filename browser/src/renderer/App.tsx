@@ -57,6 +57,7 @@ export function App({ kind }: { kind: 'main' | 'little' | 'incognito' }) {
         case 'history': return setOverlay({ name: 'library', tab: 'history' });
         case 'downloads':
         case 'showDownloads': return setOverlay({ name: 'library', tab: 'downloads' });
+        case 'extensions': return setOverlay({ name: 'library', tab: 'extensions' });
         case 'settings': return setOverlay({ name: 'settings' });
         case 'linkRules': return setOverlay({ name: 'settings', tab: 'links' });
         case 'newSpace': return setOverlay({ name: 'editSpace' });
@@ -184,7 +185,7 @@ export function App({ kind }: { kind: 'main' | 'little' | 'incognito' }) {
       </main>
 
       {overlay?.name === 'commandBar' && <CommandBar state={state} mode={overlay.mode} initial={overlay.initial} onClose={close} onRendererAction={(id) => setTimeout(() => runUiAction(id), 0)} />}
-      {overlay?.name === 'library' && <Library state={state} initialTab={overlay.tab} onClose={close} />}
+      {overlay?.name === 'library' && <Library state={state} win={win} initialTab={overlay.tab} onClose={close} />}
       {overlay?.name === 'settings' && <Settings state={state} initialTab={overlay.tab} onClose={close} onEditBoost={(id) => setOverlay({ name: 'boost', id })} />}
       {overlay?.name === 'editSpace' && <SpaceEditor state={state} spaceId={overlay.id} onClose={close} />}
       {overlay?.name === 'deleteSpace' && (

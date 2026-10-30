@@ -220,7 +220,21 @@ kbd { font: 11px ui-monospace, monospace; opacity: 0.8; margin-left: 6px; }
 /* ── site controls: URL row, permission prompt, sidebar panels, downloads ── */
 .url-row { display: flex; gap: 4px; align-items: center; }
 .url-row .url-pill { flex: 1; min-width: 0; width: auto; }
-.site-btn.on, .downloads-btn.on { background: var(--hover); color: var(--ink); }
+.site-btn.on, .downloads-btn.on, .ext-btn.on { background: var(--hover); color: var(--ink); }
+.extension-bar { display: flex; flex-wrap: wrap; gap: 2px; margin-top: 4px; }
+.ext-action { width: 26px; height: 26px; border: none; border-radius: 6px; padding: 0; background-color: transparent; background-position: center; background-repeat: no-repeat; background-size: 18px; position: relative; flex: none; }
+.ext-action:hover { background-color: var(--hover); }
+.ext-action.no-icon::after { content: attr(data-letter); position: absolute; inset: 4px; border-radius: 4px; background: #757575; color: white; font-size: 11px; display: flex; align-items: center; justify-content: center; text-transform: uppercase; }
+.ext-action .badge { position: absolute; right: 0; bottom: 1px; height: 12px; padding: 0 2px; border-radius: 3px; font-size: 9px; line-height: 12px; pointer-events: none; }
+.extensions-panel { max-height: 60%; overflow-y: auto; }
+.extensions-panel > .link { margin-top: 6px; }
+.list.extensions li { display: flex; align-items: center; gap: 6px; padding: 3px 0; }
+.extension-row.disabled { opacity: 0.55; }
+.ext-icon { width: 18px; height: 18px; flex: none; border-radius: 4px; }
+.ext-icon.letter { background: #757575; color: white; font-size: 11px; display: inline-flex; align-items: center; justify-content: center; }
+.pin-btn.on { color: var(--space); }
+.extensions-view h4 { margin: 16px 0 6px; }
+.list.arc-extensions li { display: flex; align-items: center; gap: 6px; padding: 4px 0; }
 .capture-dot { color: #e03131; font-size: 10px; margin-left: auto; }
 .permission-prompt { margin-top: 6px; background: var(--panel); border-radius: var(--radius); padding: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.14); display: flex; flex-direction: column; gap: 8px; animation: rise 160ms ease-out; }
 .permission-prompt.bar { margin: 0 0 6px; flex-direction: row; align-items: center; }

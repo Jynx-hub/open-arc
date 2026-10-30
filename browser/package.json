@@ -16,6 +16,8 @@
     "test:e2e": "npm run build && playwright test"
   },
   "dependencies": {
+    "electron-chrome-extensions": "4.10.0",
+    "electron-chrome-web-store": "0.13.0",
     "react": "19.3.0",
     "react-dom": "19.3.0"
   },

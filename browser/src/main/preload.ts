@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
+import { injectBrowserAction } from 'electron-chrome-extensions/browser-action';
 import type { Api, UiEvents } from '../shared/ipc';
 
 const api: Api = {
@@ -18,3 +19,6 @@ const api: Api = {
 };
 
 contextBridge.exposeInMainWorld('openArc', api);
+
+// `<button is="browser-action">` for extension buttons in the sidebar.
+injectBrowserAction();

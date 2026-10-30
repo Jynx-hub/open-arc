@@ -1,6 +1,6 @@
 // Window controller: which Space and tab each window shows, how live views are laid out, and every
 // command the UI or a shortcut can run.
-import { BrowserWindow, ClipboardItem, Menu, WebContentsView, app, clipboard, dialog, shell, type ContextMenuParams, type MenuItemConstructorOptions, type WebContents } from 'electron';
+import { BrowserWindow, ClipboardItem, Menu, MenuItem, WebContentsView, app, clipboard, dialog, shell, type ContextMenuParams, type MenuItemConstructorOptions, type WebContents } from 'electron';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { Command, ContextTarget, LiveTab, Rect, Snapshot, UiEvents, WindowInfo } from '../shared/ipc';
@@ -8,7 +8,7 @@ import { itemTitle, type Item, type Space, type State } from '../shared/model';
 import type { Action } from '../shared/reducer';
 import { isPersistent, rootOf, sectionOf, spaceOf, subtree } from '../shared/tree';
 import { KEY_ACTIONS, acceleratorFor } from '../shared/keymap';
-import { QUIET, clearProfileData, sessionFor, setSessionSetup } from './profiles';
+import { QUIET, clearProfileData, partitionFor, sessionFor, setSessionSetup } from './profiles';
 import type { Store } from './store';
 import { TabViews } from './tabs';
 import { search } from '../shared/search';
@@ -18,6 +18,11 @@ import { contextMenuTemplate, searchURL, type PageMenuEntry } from '../shared/co
 import { Downloads } from './downloads';
 import { Permissions } from './permissions';
 import { PrivateTabs } from './incognito';
+import { Extensions } from './extensions';
+import { ARC_DATA_DIR } from './importer';
+import { listArcExtensions } from './arcExtensions';
+import { describeExtensionPermissions, isExtensionId } from '../shared/extensions';
+import { arcProfileId } from '../shared/importArc';
 
 const SPLIT_GAP = 6;
 const PEEK_INSET = 48;
@@ -80,12 +85,14 @@ export class Browser {
   readonly tabs: TabViews;
   readonly downloads: Downloads;
   readonly permissions: Permissions;
+  readonly extensions: Extensions;
   private wins = new Map<number, Win>();
   private lastFocused: number | null = null;
   private liveTimer: NodeJS.Timeout | null = null;
   /** Tabs whose video we floated into Picture in Picture; coming back to one puts the video back. */
   private pipped = new Map<string, string>(); // tab id → the page URL it was floated from
   private progressTimer: NodeJS.Timeout | null = null;
+  private extensionsTimer: NodeJS.Timeout | null = null;
 
   constructor(private store: Store, private rendererURL: string) {
     this.tabs = new TabViews(store, {
@@ -94,6 +101,12 @@ export class Browser {
       domReady: (_itemId, wc) => applyBoosts(this.store.state, wc),
       contextMenu: (itemId, wc, params) => this.pageContextMenu(wc, params, itemId),
       fullscreen: (wc, on) => this.pageFullscreen(wc, on),
+      created: (itemId, wc) => {
+        // Known to extensions from the start, even while loading in the background.
+        const space = spaceOf(this.store.state, itemId);
+        const w = [...this.wins.values()].find((x) => x.kind === 'main' && x.spaceId === space?.id) ?? [...this.wins.values()].find((x) => x.kind === 'main');
+        if (w) this.extensions.track(wc, w.win);
+      },
       liveChanged: () => this.scheduleLive(),
     });
     this.downloads = new Downloads(store, {
@@ -111,8 +124,45 @@ export class Browser {
         if (id) this.tabs.setCapturing(id, keys);
       },
     });
+    this.extensions = new Extensions({
+      createTab: async (profileId, details) => {
+        const w = this.windowForProfile(profileId, details.windowId);
+        const space = this.currentSpace(w).profileId === profileId ? this.currentSpace(w) : this.store.state.spaces.find((s) => s.profileId === profileId);
+        if (!space) throw new Error('No Space uses this Profile');
+        const id = this.backgroundTab(space, details.url ?? 'about:blank');
+        if (details.active !== false) this.select(w, id);
+        return [this.tabs.get(id)!.webContents, w.win];
+      },
+      selectTab: (wc) => {
+        const id = this.tabs.itemFor(wc);
+        const w = this.winOf(wc) ?? (id ? this.windowForProfile(this.spaceOfItem(id).profileId) : null);
+        if (id && w && w.selectedId !== id) this.select(w, id);
+      },
+      activeTab: (win) => {
+        const w = this.wins.get(win.id);
+        return w ? this.activeTab(w) : null;
+      },
+      closeTab: (wc) => {
+        const id = this.tabs.itemFor(wc);
+        const w = this.winOf(wc);
+        if (id) this.close(w ?? this.mainWindow(this.focused()), id);
+        else if (w?.little?.webContents === wc) w.win.close();
+      },
+      createWindow: async (profileId, details) => {
+        const space = this.store.state.spaces.find((s) => s.profileId === profileId);
+        const nw = this.createWindow({ spaceId: space?.id });
+        const urls = Array.isArray(details.url) ? details.url : details.url ? [details.url] : [];
+        // Like a window full of new tabs: the first one ends up selected, at the top of Today.
+        for (const url of [...urls].reverse()) this.newTab(nw, url);
+        return nw.win;
+      },
+      closeWindow: (win) => win.close(),
+      confirmInstall: (name, permissions, wc) => this.confirmInstall(name, permissions, this.winOf(wc) ?? this.focused()),
+      changed: () => this.scheduleExtensions(),
+    });
     setSessionSetup((ses, { profileId, private: isPrivate }) => {
       if (isPrivate) this.permissions.markPrivate(ses);
+      else this.extensions.setup(ses, profileId);
       ses.on('will-download', (_e, item) => this.downloads.track(item, profileId, isPrivate));
       ses.setPermissionRequestHandler((wc, permission, callback, details) => this.permissions.request(wc, permission, callback, details));
       ses.setPermissionCheckHandler((_wc, permission, origin, details) => this.permissions.check(ses, permission, origin, details));
@@ -214,6 +264,8 @@ export class Browser {
       // The focused page first, then the other Split View panes, so no visible page waits on a hidden prompt.
       permissionPrompt: this.permissions.promptFor([this.activeContents(w), ...w.attached.map((v) => v.webContents)].filter((x): x is WebContents => !!x)),
       private: w.priv ? { tabs: w.priv.tabs(), selectedId: w.priv.selectedId, partition: w.priv.partition } : null,
+      extensionPartition: w.priv ? null : partitionFor(this.currentSpace(w).profileId),
+      activeTabId: this.activeTab(w)?.id ?? null,
     };
   }
 
@@ -294,7 +346,9 @@ export class Browser {
     this.closePeek(w);
     this.layout(w);
     this.pushWindow(w);
-    if (focus && item?.kind === 'tab') this.tabs.get(item.id)?.webContents.focus();
+    const wc = item?.kind === 'tab' ? this.tabs.get(item.id)?.webContents : null;
+    if (wc) this.extensions.selected(wc);
+    if (focus && wc) wc.focus();
   }
 
   /** Leaving a tab with a playing video floats it in Picture in Picture; returning to it docks it again. */
@@ -436,6 +490,7 @@ export class Browser {
         for (const other of this.wins.values()) if (other !== w && other.attached.includes(v)) this.detach(other, v);
         w.win.contentView.addChildView(v);
         w.attached.push(v);
+        this.extensions.track(v.webContents, w.win);
       }
       v.setBounds(rects[i]!);
       v.setBorderRadius(fsView ? 0 : 8);
@@ -780,7 +835,15 @@ export class Browser {
       case 'download': return this.downloads.run(c.op, c.id);
       case 'permission': return this.permissions.respond(c.id, c.answer);
       case 'media': return this.media(c.id, c.op);
+      case 'extensions': return this.extensionList(w);
+      case 'extension': return this.extensionOp(w, c.op, c.id);
+      case 'arcExtensions': return this.arcExtensions(w, c.dir ?? ARC_DATA_DIR);
     }
+  }
+
+  /** The page extension buttons act on: the selected tab, or the mini window's page (never Peek). */
+  private activeTab(w: Win): WebContents | null {
+    return w.little?.webContents ?? (w.selectedId ? this.tabs.get(w.selectedId)?.webContents : null) ?? null;
   }
 
   private activeContents(w: Win): WebContents | null {
@@ -1151,7 +1214,11 @@ export class Browser {
       const enabled = 'word' in e ? !!e.word : e.enabled !== false;
       return { label: e.label, enabled, click: () => this.runPageMenu(w, wc, itemId, params, e) };
     });
-    Menu.buildFromTemplate(template).popup({ window: w.win });
+    const menu = Menu.buildFromTemplate(template);
+    // Items extensions added with chrome.contextMenus go last.
+    const extra = this.extensions.contextMenuItems(wc, params);
+    if (extra.length) [new MenuItem({ type: 'separator' }), ...extra].forEach((i) => menu.append(i));
+    menu.popup({ window: w.win });
   }
 
   private runPageMenu(w: Win, wc: WebContents, itemId: string | null, p: ContextMenuParams, e: PageMenuEntry) {
@@ -1209,6 +1276,89 @@ export class Browser {
     const i = parent.children.indexOf(id);
     const ids = parent.children.filter((_, j) => (which === 'above' ? j < i : which === 'below' ? j > i : j !== i));
     this.store.dispatch({ type: 'item.archive', ids, reason: 'manual', now: Date.now() });
+  }
+
+  // ── extensions ───────────────────────────────────────────────────────────
+
+  /** A main window to open a Profile's tab in: the given one, else one already showing that Profile, else any. */
+  private windowForProfile(profileId: string, windowId?: number): Win {
+    const mains = [...this.wins.values()].filter((x) => x.kind === 'main');
+    return (
+      mains.find((x) => x.win.id === windowId) ??
+      mains.find((x) => x.win.id === this.lastFocused && this.currentSpace(x).profileId === profileId) ??
+      mains.find((x) => this.currentSpace(x).profileId === profileId) ??
+      this.mainWindow(this.focused())
+    );
+  }
+
+  private spaceOfItem(id: string): Space {
+    return spaceOf(this.store.state, id) ?? this.store.state.spaces[0]!;
+  }
+
+  private extensionList(w: Win) {
+    if (w.priv) return [];
+    const profileId = this.currentSpace(w).profileId;
+    return this.extensions.list(sessionFor(profileId), profileId);
+  }
+
+  /** Arc's extensions to offer this window's Profile: from the Arc profile it was imported from, else from all of them. */
+  private arcExtensions(w: Win, dir: string) {
+    const all = listArcExtensions(dir);
+    const profileId = this.currentSpace(w).profileId;
+    const matching = all.filter((a) => arcProfileId(a.profileDir) === profileId);
+    return [...new Map((matching.length ? matching : all).map((a) => [a.id, a])).values()];
+  }
+
+  private async extensionOp(w: Win, op: 'install' | 'remove' | 'enable' | 'disable', id: string): Promise<boolean> {
+    if (w.priv || !isExtensionId(id)) return false;
+    const profileId = this.currentSpace(w).profileId;
+    const ses = sessionFor(profileId);
+    try {
+      if (op === 'install') {
+        const name = await this.extensions.install(ses, profileId, id, (n, permissions) => this.confirmInstall(n, permissions, w));
+        if (!name) return false;
+        this.toast(w, `Added ${name}`);
+      } else if (op === 'remove') {
+        await this.extensions.remove(ses, profileId, id);
+        const pinned = this.store.state.settings.pinnedExtensions;
+        this.store.dispatch({ type: 'settings.update', patch: { pinnedExtensions: { ...pinned, [profileId]: (pinned[profileId] ?? []).filter((x) => x !== id) } } });
+      } else await this.extensions.setEnabled(ses, profileId, id, op === 'enable');
+      return true;
+    } catch (err) {
+      console.error(`extension ${op} failed`, err);
+      this.toast(w, op === 'install' ? 'Could not install that extension from the Chrome Web Store' : 'Could not change that extension');
+      return false;
+    }
+  }
+
+  /** The Web Store's Add button: confirm, listing what the extension asks to do. */
+  private async confirmInstall(name: string, permissions: string[], w: Win | null): Promise<boolean> {
+    const lines = describeExtensionPermissions(permissions);
+    const opts = {
+      type: 'question' as const,
+      buttons: ['Add Extension', 'Cancel'],
+      defaultId: 0,
+      cancelId: 1,
+      message: `Add “${name}” to Open Arc?`,
+      detail: lines.length ? `It will be able to:\n${lines.map((l) => `• ${l}`).join('\n')}` : 'It doesn’t ask for any special access.',
+    };
+    const { response } = w ? await dialog.showMessageBox(w.win, opts) : await dialog.showMessageBox(opts);
+    return response === 0;
+  }
+
+  private scheduleExtensions() {
+    if (this.extensionsTimer) return;
+    this.extensionsTimer = setTimeout(() => {
+      this.extensionsTimer = null;
+      // One list per Profile, however many windows show it (building one reads every icon).
+      const lists = new Map<string, ReturnType<Browser['extensionList']>>();
+      for (const w of this.wins.values()) {
+        if (w.priv) continue;
+        const profileId = this.currentSpace(w).profileId;
+        if (!lists.has(profileId)) lists.set(profileId, this.extensionList(w));
+        this.sendUi(w, 'extensions', lists.get(profileId)!);
+      }
+    }, 100);
   }
 
   // ── app menu ─────────────────────────────────────────────────────────────

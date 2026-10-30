@@ -1,6 +1,7 @@
 // The contract between the main process and the sidebar UI (exposed as `window.openArc` by the preload).
 import type { Action } from './reducer';
 import type { State } from './model';
+import type { ArcExtension, ExtensionInfo } from './extensions';
 
 export interface LiveTab {
   url: string;
@@ -57,6 +58,10 @@ export interface WindowInfo {
   permissionPrompt: PermissionPrompt | null;
   /** Private window: its tabs, which are not sidebar items. */
   private: { tabs: PrivateTab[]; selectedId: string | null; partition: string } | null;
+  /** Session partition whose extensions this window shows; null in a private window (no extensions there). */
+  extensionPartition: string | null;
+  /** WebContents id of the page extension buttons act on (the selected tab, or the mini window's page). */
+  activeTabId: number | null;
 }
 
 export interface PermissionPrompt {
@@ -95,7 +100,12 @@ export type Command =
   | { type: 'liveFolderRefresh'; id: string }
   | { type: 'download'; op: DownloadOp; id: string }
   | { type: 'permission'; id: string; answer: 'allow' | 'once' | 'block' }
-  | { type: 'media'; id: string; op: 'playPause' | 'mute' };
+  | { type: 'media'; id: string; op: 'playPause' | 'mute' }
+  /** Extensions of this window's Profile. Returns ExtensionInfo[]. */
+  | { type: 'extensions' }
+  | { type: 'extension'; op: 'install' | 'remove' | 'enable' | 'disable'; id: string }
+  /** Extensions found in Arc's data. Returns ArcExtension[]. */
+  | { type: 'arcExtensions'; dir?: string };
 
 export type ContextTarget =
   | { kind: 'item'; id: string }
@@ -124,7 +134,11 @@ export interface UiEvents {
   toast: { message: string; actionLabel?: string; command?: Command };
   /** Byte counts of running downloads (kept out of State so progress never rewrites the saved file). */
   downloadProgress: Record<string, { receivedBytes: number; totalBytes: number }>;
+  /** This window's Profile's extensions, after an install, removal, or enable/disable. */
+  extensions: ExtensionInfo[];
 }
+
+export type { ArcExtension, ExtensionInfo };
 
 export interface Api {
   getState(): Promise<State>;

@@ -17,6 +17,8 @@ export interface TabHooks {
   contextMenu(itemId: string, wc: WebContents, params: ContextMenuParams): void;
   /** The page entered or left fullscreen (a video's fullscreen button, `requestFullscreen()`). */
   fullscreen(wc: WebContents, on: boolean): void;
+  /** A tab's page view was just made (it may not be on screen yet). */
+  created(itemId: string, wc: WebContents): void;
   liveChanged(): void;
 }
 
@@ -68,6 +70,7 @@ export class TabViews {
     const view = pageView(sessionFor(profileId));
     this.entries.set(itemId, { view, partition: partitionFor(profileId) });
     this.wire(itemId, view.webContents);
+    this.hooks.created(itemId, view.webContents);
     if (item.tab.savedURL) void view.webContents.loadURL(item.tab.savedURL).catch(() => {});
     return view;
   }

@@ -22,5 +22,10 @@ export function migrate(state: State): State {
     state.settings = { ...state.settings, autoPictureInPicture: state.settings.autoPictureInPicture ?? true };
     state.version = 4;
   }
+  if (state.version < 5) {
+    // v5: pinned extension buttons.
+    state.settings = { ...state.settings, pinnedExtensions: state.settings.pinnedExtensions ?? {} };
+    state.version = 5;
+  }
   return { ...state, version: STATE_VERSION };
 }

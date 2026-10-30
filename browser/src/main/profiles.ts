@@ -36,6 +36,11 @@ export function partitionFor(profileId: string): string {
   return `persist:profile-${profileId}`;
 }
 
+/** The Profile a `partitionFor` name belongs to, or null for any other partition. */
+export function profileOfPartition(partition: string): string | null {
+  return partition.startsWith('persist:profile-') ? partition.slice('persist:profile-'.length) : null;
+}
+
 export function sessionFor(profileId: string): Session {
   const partition = partitionFor(profileId);
   const ses = session.fromPartition(partition);

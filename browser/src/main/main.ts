@@ -1,4 +1,5 @@
-import { app, BrowserWindow, dialog, ipcMain, protocol, net } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, protocol, net, session } from 'electron';
+import { ElectronChromeExtensions, setSessionPartitionResolver } from 'electron-chrome-extensions';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type { Action } from '../shared/reducer';
@@ -7,6 +8,7 @@ import { dueForArchive } from '../shared/archiver';
 import { Store, StateTooNewError } from './store';
 import { Browser } from './browser';
 import { startLiveFolderTimer } from './liveFolders';
+import { profileOfPartition, sessionFor } from './profiles';
 
 const ARCHIVE_TICK_MS = 60_000;
 
@@ -41,6 +43,13 @@ app.whenReady().then(() => {
     const file = path.join(rendererDir, decodeURIComponent(pathname === '/' ? '/index.html' : pathname));
     if (!file.startsWith(rendererDir)) return new Response('not found', { status: 404 });
     return net.fetch(pathToFileURL(file).toString());
+  });
+  // Extension buttons in the sidebar: their icons (crx://) load in the UI's own session, and their
+  // clicks name a Profile's partition, which must come back configured (with its extensions).
+  ElectronChromeExtensions.handleCRXProtocol(session.defaultSession);
+  setSessionPartitionResolver((partition) => {
+    const profileId = profileOfPartition(partition);
+    return profileId ? sessionFor(profileId) : session.fromPartition(partition);
   });
 
   let store: Store;

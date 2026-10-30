@@ -155,7 +155,7 @@ export function stateFromArc(model: ArcModel, newId: () => string, now: number, 
   const t = (d: Date | null) => d?.getTime() ?? now;
 
   const ensureProfile = (name: string) => {
-    const id = name === 'default' ? DEFAULT_PROFILE_ID : `p-${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+    const id = arcProfileId(name);
     if (!state.profiles.some((p) => p.id === id)) {
       state.profiles.push({ id, name: name === 'default' ? 'Default' : name });
       const fav = newId();
@@ -290,4 +290,9 @@ function orderSubtree(store: Record<string, Item>, rootId: string): Item[] {
   };
   walk(rootId);
   return out;
+}
+
+/** Our Profile id for an Arc profile: `default` (or its folder, "Default") is ours too; custom ones go by folder name. */
+export function arcProfileId(name: string): string {
+  return name === 'default' || name === 'Default' ? DEFAULT_PROFILE_ID : `p-${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
 }
