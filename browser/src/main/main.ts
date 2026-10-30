@@ -14,7 +14,11 @@ const ARCHIVE_TICK_MS = 60_000;
 
 // Tests point this at a throwaway folder.
 if (process.env.OPEN_ARC_USER_DATA) app.setPath('userData', process.env.OPEN_ARC_USER_DATA);
-if (process.env.OPEN_ARC_QUIET === '1') app.dock?.hide();
+if (process.env.OPEN_ARC_QUIET === '1') {
+  app.dock?.hide();
+  // safeStorage and cookie encryption use a throwaway key instead of the login Keychain (no prompts).
+  app.commandLine.appendSwitch('use-mock-keychain');
+}
 
 protocol.registerSchemesAsPrivileged([{ scheme: 'openarc', privileges: { standard: true, secure: true, supportFetchAPI: true } }]);
 

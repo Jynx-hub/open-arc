@@ -5,8 +5,9 @@ import type { State } from '../shared/model';
 import { rootOf } from '../shared/tree';
 
 /**
- * Test runs stay out of the user's way: windows are invisible and never take focus, the app stays out of
- * the Dock, and a fullscreen page fills its window without taking the whole screen.
+ * Test runs stay out of the user's way: windows are invisible, click-through and never take focus, the
+ * app stays out of the Dock, a fullscreen page fills its window without taking the whole screen, and
+ * nothing touches the user's Keychain or Downloads folder.
  */
 export const QUIET = process.env.OPEN_ARC_QUIET === '1';
 

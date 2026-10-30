@@ -9,6 +9,7 @@ import { command, launch, state, waitForState } from './helpers';
 
 let server: http.Server;
 let base = '';
+const REAL_PIP = process.env.OPEN_ARC_E2E_REAL_PIP === '1';
 
 test.beforeAll(async () => {
   server = http.createServer((req, res) => {
@@ -24,8 +25,24 @@ test.beforeAll(async () => {
       return res.end('<title>Cookie</title>cookie set');
     }
     if (url === '/video') {
-      // A muted looping video fed by a canvas, so the test needs no media file.
+      // A muted looping video fed by a canvas, so the test needs no media file. A real Picture in Picture
+      // window floats over the user's screen, so unless OPEN_ARC_E2E_REAL_PIP=1 the page gets a stand-in
+      // that keeps the API's rules (a user gesture to enter, one floating video) without the window.
       return res.end(`<title>Video</title><body style="margin:0"><canvas width="64" height="48"></canvas><video muted autoplay playsinline width="320" height="180"></video><script>
+        if (${!REAL_PIP}) {
+          let floating = null;
+          Object.defineProperty(Document.prototype, 'pictureInPictureElement', { configurable: true, get: () => floating });
+          HTMLVideoElement.prototype.requestPictureInPicture = function () {
+            if (!navigator.userActivation.isActive) return Promise.reject(new DOMException('needs a user gesture', 'NotAllowedError'));
+            floating = this;
+            return Promise.resolve({ width: 320, height: 180 });
+          };
+          Document.prototype.exitPictureInPicture = function () {
+            if (!floating) return Promise.reject(new DOMException('nothing is floating', 'InvalidStateError'));
+            floating = null;
+            return Promise.resolve();
+          };
+        }
         const c = document.querySelector('canvas'), g = c.getContext('2d'), v = document.querySelector('video');
         let n = 0;
         setInterval(() => { g.fillStyle = n++ % 2 ? '#c33' : '#33c'; g.fillRect(0, 0, 64, 48); }, 50);

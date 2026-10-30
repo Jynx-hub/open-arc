@@ -202,6 +202,7 @@ export class Browser {
     win.once('ready-to-show', () => {
       if (!QUIET) return win.show();
       win.setOpacity(0);
+      win.setIgnoreMouseEvents(true);
       win.showInactive();
     });
     void win.loadURL(`${this.rendererURL}#${kind}`);

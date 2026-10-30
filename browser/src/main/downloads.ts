@@ -7,7 +7,7 @@ import { randomUUID } from 'node:crypto';
 import type { DownloadOp } from '../shared/ipc';
 import type { DownloadEntry } from '../shared/model';
 import { uniqueFilename } from '../shared/files';
-import { sessionFor } from './profiles';
+import { QUIET, sessionFor } from './profiles';
 import type { Store } from './store';
 
 export type DownloadProgress = Record<string, { receivedBytes: number; totalBytes: number }>;
@@ -33,7 +33,8 @@ export class Downloads {
   }
 
   dir(): string {
-    return process.env.OPEN_ARC_DOWNLOADS_DIR || app.getPath('downloads');
+    // A quiet (test) run never saves into the user's real Downloads folder.
+    return process.env.OPEN_ARC_DOWNLOADS_DIR || (QUIET ? path.join(app.getPath('userData'), 'Downloads') : app.getPath('downloads'));
   }
 
   /** Download `url` from `wc`'s page, asking where to save it. */
