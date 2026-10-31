@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "__MSG_extName__",
+  "default_locale": "en",
+  "version": "1.0",
+  "description": "Open Arc test extension",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEArGGOCVI8lGThs0vsSInvIzBpZU5FtZxO1EI0A4uoheHo5flmg4gh+stwImWcVvCjexg9Iuy8Wpn0j0w2QBDqkEPzBIXIDzRhzeFmMZcvJdUtAOdMO5g3KzQUtPxcwd4qskCtfomW8Zftvr2zoRLoi35OmPER6ZptLJOD65Dh4zC1XsQt715+eDy9cCmrBvxEyWEPlf/vlvGOB/Jqf7/D/K5i8MktyJ0aFZDmo0yiXRQXyfC/fdaXVVCWdgDlbPGpV64mpyHtnCppM4ltcsNOzSSxrfRAR+w/Ka1bg6wNAMvj5DNjmVAcAE+xxSBMBFrnjxLebmYbKLSu8mkHHT4hgQIDAQAB",
+  "background": {
+    "service_worker": "worker.js"
+  },
+  "action": {
+    "default_title": "Open Arc Test"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://127.0.0.1/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_start"
+    }
+  ]
+}

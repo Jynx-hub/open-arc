@@ -72,9 +72,9 @@ The full case list was recovered from the app's type metadata. ✅ = seen in rea
 | `itemContainer` ✅ | A root container | `containerType`: `{"spaceItems": {"_0": "<spaceID>"}}` (a Space's pinned/unpinned root) or `{"topApps": {"_0": Profile}}` (Favorites row) |
 | `list` ✅ | A folder | `{}` (the folder name is the item's `title`) |
 | `tabGroup` ✅ | A tab group | `{"title": string}` |
-| `splitView` | Split View of 2+ tabs | TODO |
-| `arcDocument` | A Note | Contains `arcDocumentID`, `isEditable`, `timeLastActiveAt` (unverified) |
-| `easel` | An Easel (canvas) | Contains `easelID` (unverified) |
+| `splitView` ✅ | Split View of 2+ tabs (the tabs are its `childrenIds`) | `layoutOrientation` (`"horizontal"` seen for a split made by dragging a tab onto the page), `itemWidthFactors`, `focusItemID` (child ID or null), `customInfo` (null unless renamed), `timeLastActiveAt` |
+| `arcDocument` | A Note | Contains `arcDocumentID`, `isEditable`, `timeLastActiveAt` (unverified; Arc 1.170 no longer offers new Notes, so no sample) |
+| `easel` ✅ | An Easel (canvas) | `easelID` (= the Easel's document ID in the [cloud cache](cloud-cache.md)), `title`, `shareStatus` (`creatorOnly` seen), `creatorID` (Firebase user ID), `timeLastActiveAt`. Content is not here. |
 | `sharedObject` | A shared folder/split/Space from another user | TODO |
 | `instantLinks` | Instant Links result | TODO |
 | `archiveContent` | Archive view entry | TODO |
@@ -82,7 +82,9 @@ The full case list was recovered from the app's type metadata. ✅ = seen in rea
 | `arcSearch` | Browse-for-me / web-search result | Has `loading` / `error` states |
 | `welcomeToArc` | Onboarding item | — |
 
-Folders can also carry `automaticLiveFolderData` (Live Folders, which fill automatically from GitHub, RSS and similar sources). Shape TODO.
+`itemWidthFactors` is a keyed array (`[childID, fraction, …]`) like `containers`. In the one sample (two tabs at an even split) it listed only the first child, at `0.5`. Panes that aren't listed presumably share the remaining width. Uneven splits and splits of 3+ panes still need samples.
+
+Folders can also carry `automaticLiveFolderData` (Live Folders, which fill automatically from GitHub, RSS and similar sources). Shape TODO: Arc 1.170 offered no way to create a Live Folder, so no sample.
 
 ## Reconstructing the tree
 

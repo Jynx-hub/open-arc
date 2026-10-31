@@ -32,4 +32,5 @@ All specs below are **drafts**: derived from on-disk data, preferences, and bina
 | [command-bar](command-bar.md) | Launcher, Site Search, learned ranking | partly |
 | [boosts](boosts.md) | Per-site CSS/JS, sharing rules | sharing only |
 | [notes-easels-library](notes-easels-library.md) | Notes, Easels, Captures, Library | **yes, export before shutdown** |
+| [ui-layout](ui-layout.md) | Window/sidebar/overlay measurements (partial) | no |
 | [small-features](small-features.md) | Copy URL, PiP, Tidy*, Instant Links, sync, telemetry, shortcuts | mixed |

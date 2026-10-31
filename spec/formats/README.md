@@ -28,6 +28,7 @@ Chromium-level data (history, cookies, passwords, extensions) lives separately u
 | `StorableLinkRouting.json` | Air Traffic Control rules (which links open where) | [link-routing.md](link-routing.md) |
 | `StorableKeyBindings.json` | User keyboard-shortcut overrides | [keybindings.md](keybindings.md) |
 | `StorableWindows.json` | Open windows, sidebar width/mode, last focused Space | [windows.md](windows.md) |
+| `~/Library/Application Support/firestore/Arc/…` (LevelDB) | Firestore offline cache: Boosts, Easel content, synced preferences | [cloud-cache.md](cloud-cache.md) |
 | `StorableCommandBarAdditionalRanking.json` | Command Bar ranking signals (queries → chosen result, recent tab switches) | TODO |
 | `StorableDownloadMetadata.json` | Download ID → `{url, date}` | TODO |
 | `StorableHome.json`, `StorableLiveData.json`, `StorableDeveloperModeState.json`, `StorableSessionRestorationData.json` | Minor state | TODO |

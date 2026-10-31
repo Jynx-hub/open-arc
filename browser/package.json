@@ -1,0 +1,36 @@
+{
+  "name": "open-arc-browser",
+  "private": true,
+  "version": "0.0.1",
+  "description": "A clean-room, local-first browser with an Arc-style sidebar workflow. Built only from ../spec.",
+  "main": "out/main.cjs",
+  "license": "MIT",
+  "scripts": {
+    "build:main": "node scripts/build-main.mjs",
+    "build:renderer": "vite build",
+    "build": "npm run build:main && npm run build:renderer",
+    "start": "electron .",
+    "dev": "npm run build && electron .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:e2e": "npm run build && playwright test"
+  },
+  "dependencies": {
+    "electron-chrome-extensions": "4.10.0",
+    "electron-chrome-web-store": "0.13.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.0",
+    "@types/node": "24.19.2",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.1.2",
+    "electron": "44.7.0",
+    "esbuild": "0.28.2",
+    "typescript": "7.0.2",
+    "vite": "8.3.4",
+    "vitest": "5.0.4"
+  }
+}

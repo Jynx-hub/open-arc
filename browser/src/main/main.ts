@@ -1,0 +1,126 @@
+import { app, BrowserWindow, dialog, ipcMain, protocol, net, session, type WebContents } from 'electron';
+import { ElectronChromeExtensions, setSessionPartitionResolver } from 'electron-chrome-extensions';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+import type { Action } from '../shared/reducer';
+import type { Command, Rect } from '../shared/ipc';
+import { dueForArchive } from '../shared/archiver';
+import { Store, StateTooNewError } from './store';
+import { Browser } from './browser';
+import { startLiveFolderTimer } from './liveFolders';
+import { profileOfPartition, sessionFor } from './profiles';
+
+const ARCHIVE_TICK_MS = 60_000;
+
+// Tests point this at a throwaway folder.
+if (process.env.OPEN_ARC_USER_DATA) app.setPath('userData', process.env.OPEN_ARC_USER_DATA);
+if (process.env.OPEN_ARC_QUIET === '1') {
+  app.dock?.hide();
+  // safeStorage and cookie encryption use a throwaway key instead of the login Keychain (no prompts).
+  app.commandLine.appendSwitch('use-mock-keychain');
+}
+
+protocol.registerSchemesAsPrivileged([{ scheme: 'openarc', privileges: { standard: true, secure: true, supportFetchAPI: true } }]);
+
+if (!app.requestSingleInstanceLock()) app.quit();
+
+let browser: Browser | null = null;
+const pendingUrls: string[] = [];
+
+// macOS delivers links from other apps (when we're the default browser) through `open-url`.
+app.on('open-url', (event, url) => {
+  event.preventDefault();
+  if (browser) browser.openExternal(url);
+  else pendingUrls.push(url);
+});
+
+app.on('second-instance', (_e, argv) => {
+  const url = argv.find((a) => /^https?:\/\//.test(a));
+  if (url) browser?.openExternal(url);
+  else browser?.focused()?.win.focus();
+});
+
+app.whenReady().then(() => {
+  const rendererDir = path.join(__dirname, 'renderer');
+  protocol.handle('openarc', (req) => {
+    const { pathname } = new URL(req.url);
+    const file = path.join(rendererDir, decodeURIComponent(pathname === '/' ? '/index.html' : pathname));
+    if (!file.startsWith(rendererDir)) return new Response('not found', { status: 404 });
+    return net.fetch(pathToFileURL(file).toString());
+  });
+  // Extension buttons in the sidebar: their icons (crx://) load in the UI's own session, and their
+  // clicks name a Profile's partition, which must come back configured (with its extensions).
+  ElectronChromeExtensions.handleCRXProtocol(session.defaultSession);
+  setSessionPartitionResolver((partition) => {
+    const profileId = profileOfPartition(partition);
+    return profileId ? sessionFor(profileId) : session.fromPartition(partition);
+  });
+
+  let store: Store;
+  try {
+    store = new Store(path.join(app.getPath('userData'), 'state.json'));
+  } catch (err) {
+    if (!(err instanceof StateTooNewError)) throw err;
+    dialog.showErrorBox('Open Arc can’t open your data', err.message);
+    app.exit(1);
+    return;
+  }
+  browser = new Browser(store, process.env.OPEN_ARC_RENDERER_URL ?? 'openarc://app/index.html');
+  const b = browser;
+  b.buildMenu();
+
+  // Only the app's own windows talk on these channels; web pages have a preload too (passwords.ts).
+  const fromUi = (e: { sender: WebContents }) => !!b.winFor(e.sender);
+  ipcMain.handle('getState', (e) => (fromUi(e) ? b.uiState() : null));
+  ipcMain.handle('getWindow', (e) => {
+    const w = b.winFor(e.sender);
+    return w ? b.windowInfo(w) : null;
+  });
+  ipcMain.handle('getLive', (e) => (fromUi(e) ? b.liveSnapshot() : null));
+  ipcMain.on('dispatch', (e, action: Action) => fromUi(e) && store.dispatch(action));
+  ipcMain.handle('command', (e, command: Command) => {
+    const w = b.winFor(e.sender);
+    return w ? b.command(w, command) : null;
+  });
+  ipcMain.on('setContentBounds', (e, rect: Rect) => {
+    const w = b.winFor(e.sender);
+    if (w) b.setContentBounds(w, rect);
+  });
+  ipcMain.handle('find', (e, text: string, opts: { forward?: boolean; findNext?: boolean }) => {
+    const w = b.winFor(e.sender);
+    if (w) b.find(w, text, opts);
+  });
+  ipcMain.handle('captures', async (e) => (fromUi(e) ? (await import('./library')).listCaptures() : null));
+
+  b.createWindow();
+  if (store.firstRun) {
+    const w = b.focused();
+    if (w) b.sendUi(w, 'action', { id: 'welcome' });
+  }
+  for (const url of pendingUrls.splice(0)) b.openExternal(url);
+
+  // Auto-archive: idle Today tabs past their Profile's threshold, never a selected tab.
+  setInterval(() => {
+    const selected = new Set(b.allWindows().flatMap((w) => (w.selectedId ? [w.selectedId] : [])));
+    const ids = dueForArchive(store.state, Date.now(), selected);
+    if (!ids.length) return;
+    store.dispatch({ type: 'item.archive', ids, reason: 'auto', now: Date.now() });
+    const first = !store.state.settings.seenArchiveEducation;
+    if (first) store.dispatch({ type: 'settings.update', patch: { seenArchiveEducation: true } });
+    for (const w of b.allWindows()) {
+      if (first) b.sendUi(w, 'action', { id: 'archiveEducation' });
+      b.toast(w, `${ids.length} idle ${ids.length === 1 ? 'tab was' : 'tabs were'} archived`, 'Open Archive', { type: 'runAction', id: 'archive' });
+    }
+  }, Number(process.env.OPEN_ARC_ARCHIVE_TICK_MS) || ARCHIVE_TICK_MS);
+
+  startLiveFolderTimer(store);
+
+  app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) b.createWindow();
+  });
+  app.on('before-quit', () => store.flush());
+});
+
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') app.quit();
+});

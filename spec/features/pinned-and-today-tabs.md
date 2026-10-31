@@ -19,6 +19,11 @@ A Space's sidebar has two sections separated by a divider:
 - Pinning or unpinning shows a confirmation toast.
 - A "reset all pinned tabs" action returns every pinned tab in the Space to its saved URL.
 
+## Runtime observations (2026-10-27, Arc 1.170.0, via the scripting interface)
+- A tab created in a window (scripting `make new tab` with a URL) lands in **Today** (`unpinned`) and becomes the selected tab.
+- Closing the selected Today tab removes it from the sidebar, selects another tab in the same Space, and an Archive entry for the tab shows up in the archive file shortly afterwards.
+- Arc's scripting `location` property reports `topApp` (Favorites), `pinned` or `unpinned` for every tab in a window, across all Spaces. Setting it fails: pin and unpin cannot be scripted. The pin/unpin toggle itself was not exercised (it needs keyboard or UI access).
+
 ## Storage
 - The pinned container is `Space.containerIDs["pinned"]` and Today is `["unpinned"]`.
 - A tab's saved URL is `data.tab.savedURL`, and `title` is the user's rename.

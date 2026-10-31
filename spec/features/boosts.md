@@ -1,5 +1,5 @@
 # Boosts
-**Status:** draft · **Data:** `StorableBoostsData.json` (format TODO, no sample yet) · **Cloud-dependent:** sharing only
+**Status:** draft · **Data:** [cloud cache](../formats/cloud-cache.md) › `boosts` (Firestore). No `StorableBoostsData.json` is written on Arc 1.170, even after creating a Boost. · **Cloud-dependent:** stored via the cloud, with a local offline copy
 
 ## What it does
 Per-site customizations the user creates in Arc: custom CSS, a font or color theme, element hiding ("zap"), and custom JavaScript. They are applied automatically every time the site loads.
@@ -14,4 +14,5 @@ Per-site customizations the user creates in Arc: custom CSS, a font or color the
 ## Rebuild notes
 - Inject CSS with `webContents.insertCSS` and JS with `executeJavaScript` in an isolated world on `dom-ready` for matching hosts.
 - The exporter should write each Boost as a userstyle for the Stylus extension (CSS) and a userscript for Tampermonkey/Violentmonkey (JS).
-- **Sample needed:** create a test Boost in Arc so the on-disk format can be documented.
+- The visual editor's color setting is stored as color-wheel parameters (hue, saturation, secondary-hue offset, light/dark base), not as CSS. To reproduce it, derive a theme from those values; an exact match to Arc's recoloring isn't possible without its algorithm.
+- **Still needed:** samples of a zapped element and of a Boost with custom CSS/JS (the attempted code sample did not persist).
