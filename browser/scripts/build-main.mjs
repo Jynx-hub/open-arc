@@ -7,4 +7,6 @@ const extensionLibs = ['electron-chrome-extensions', 'electron-chrome-web-store'
 await Promise.all([
   build({ ...common, entryPoints: ['src/main/main.ts'], outfile: 'out/main.cjs', external: [...common.external, ...extensionLibs] }),
   build({ ...common, entryPoints: ['src/main/preload.ts'], outfile: 'out/preload.cjs' }),
+  // Sign-in fields in web pages (registered on each Profile session).
+  build({ ...common, entryPoints: ['src/main/pagePreload.ts'], outfile: 'out/pagePreload.cjs' }),
 ]);

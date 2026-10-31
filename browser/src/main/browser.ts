@@ -3,7 +3,7 @@
 import { BrowserWindow, ClipboardItem, Menu, MenuItem, WebContentsView, app, clipboard, dialog, shell, type ContextMenuParams, type MenuItemConstructorOptions, type WebContents } from 'electron';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import type { Command, ContextTarget, LiveTab, Rect, Snapshot, UiEvents, WindowInfo } from '../shared/ipc';
+import type { Command, ContextTarget, LiveTab, PasswordOp, Rect, Snapshot, UiEvents, WindowInfo } from '../shared/ipc';
 import { itemTitle, type Item, type Space, type State } from '../shared/model';
 import type { Action } from '../shared/reducer';
 import { isPersistent, rootOf, sectionOf, spaceOf, subtree } from '../shared/tree';
@@ -19,6 +19,7 @@ import { Downloads } from './downloads';
 import { Permissions } from './permissions';
 import { PrivateTabs } from './incognito';
 import { Extensions } from './extensions';
+import { Passwords } from './passwords';
 import { ARC_DATA_DIR } from './importer';
 import { listArcExtensions } from './arcExtensions';
 import { describeExtensionPermissions, isExtensionId } from '../shared/extensions';
@@ -86,6 +87,7 @@ export class Browser {
   readonly downloads: Downloads;
   readonly permissions: Permissions;
   readonly extensions: Extensions;
+  readonly passwords: Passwords;
   private wins = new Map<number, Win>();
   private lastFocused: number | null = null;
   private liveTimer: NodeJS.Timeout | null = null;
@@ -160,9 +162,25 @@ export class Browser {
       confirmInstall: (name, permissions, wc) => this.confirmInstall(name, permissions, this.winOf(wc) ?? this.focused()),
       changed: () => this.scheduleExtensions(),
     });
+    this.passwords = new Passwords(app.getPath('userData'), {
+      promptChanged: () => this.wins.forEach((w) => this.pushWindow(w)),
+      listChanged: (profileId) => {
+        for (const w of this.wins.values()) if (!w.priv && this.currentSpace(w).profileId === profileId) this.sendUi(w, 'passwords', null);
+      },
+      showMenu: (wc, items, at) => {
+        const w = this.winOf(wc);
+        const view = w && [w.little, w.peek?.view, ...w.attached].find((v) => v?.webContents === wc);
+        if (!w || !view) return;
+        const b = view.getBounds();
+        Menu.buildFromTemplate(items).popup({ window: w.win, x: Math.round(b.x + at.x), y: Math.round(b.y + at.y) });
+      },
+    });
     setSessionSetup((ses, { profileId, private: isPrivate }) => {
       if (isPrivate) this.permissions.markPrivate(ses);
-      else this.extensions.setup(ses, profileId);
+      else {
+        this.extensions.setup(ses, profileId);
+        this.passwords.setup(ses, profileId);
+      }
       ses.on('will-download', (_e, item) => this.downloads.track(item, profileId, isPrivate));
       ses.setPermissionRequestHandler((wc, permission, callback, details) => this.permissions.request(wc, permission, callback, details));
       ses.setPermissionCheckHandler((_wc, permission, origin, details) => this.permissions.check(ses, permission, origin, details));
@@ -262,12 +280,17 @@ export class Browser {
       peek: peekWc ? { url: peekWc.getURL(), title: peekWc.getTitle() } : null,
       little: littleWc ? { url: littleWc.getURL(), title: littleWc.getTitle() } : null,
       zoom: this.activeContents(w)?.getZoomFactor() ?? 1,
-      // The focused page first, then the other Split View panes, so no visible page waits on a hidden prompt.
-      permissionPrompt: this.permissions.promptFor([this.activeContents(w), ...w.attached.map((v) => v.webContents)].filter((x): x is WebContents => !!x)),
+      permissionPrompt: this.permissions.promptFor(this.promptOrder(w)),
+      passwordPrompt: w.priv ? null : this.passwords.promptFor(this.promptOrder(w)),
       private: w.priv ? { tabs: w.priv.tabs(), selectedId: w.priv.selectedId, partition: w.priv.partition } : null,
       extensionPartition: w.priv ? null : partitionFor(this.currentSpace(w).profileId),
       activeTabId: this.activeTab(w)?.id ?? null,
     };
+  }
+
+  /** Pages whose prompts a window shows: the focused page first, then the other Split View panes, so no visible page waits on a hidden prompt. */
+  private promptOrder(w: Win): WebContents[] {
+    return [this.activeContents(w), ...w.attached.map((v) => v.webContents)].filter((x): x is WebContents => !!x);
   }
 
   setContentBounds(w: Win, rect: Rect) {
@@ -835,6 +858,17 @@ export class Browser {
       }
       case 'download': return this.downloads.run(c.op, c.id);
       case 'permission': return this.permissions.respond(c.id, c.answer);
+      case 'passwordPrompt':
+        try {
+          return this.passwords.respond(c.id, c.answer);
+        } catch (err) {
+          return this.toast(w, (err as Error).message);
+        }
+      case 'passwords':
+        return this.passwordOp(w, c).catch((err: Error) => {
+          this.toast(w, err.message);
+          return { error: err.message };
+        });
       case 'media': return this.media(c.id, c.op);
       case 'extensions': return this.extensionList(w);
       case 'extension': return this.extensionOp(w, c.op, c.id);
@@ -1332,6 +1366,41 @@ export class Browser {
     }
   }
 
+  /** Library › Passwords, on the window's Profile. Private windows have no saved passwords. */
+  private async passwordOp(w: Win, c: PasswordOp): Promise<unknown> {
+    if (w.priv) return null;
+    const profileId = this.currentSpace(w).profileId;
+    const p = this.passwords;
+    switch (c.op) {
+      case 'list': return p.list(profileId);
+      case 'reveal': return p.reveal(profileId, c.id);
+      case 'copy': {
+        const ok = await p.copy(profileId, c.id);
+        if (ok) this.toast(w, 'Password copied');
+        return ok;
+      }
+      case 'update': return p.update(profileId, c.id, c);
+      case 'remove': return p.remove(profileId, c.id);
+      case 'unblock': return p.unblock(profileId, c.origin);
+      case 'import': {
+        // A path from the UI is for tests; a packaged app only imports what the user picked.
+        let file = app.isPackaged ? undefined : c.file;
+        if (!file) {
+          const res = await dialog.showOpenDialog(w.win, { title: 'Choose a passwords CSV file', properties: ['openFile'], filters: [{ name: 'CSV', extensions: ['csv'] }] });
+          file = res.filePaths[0];
+          if (res.canceled || !file) return null;
+        }
+        return p.importCsv(profileId, file);
+      }
+      case 'deleteImported': return p.deleteImported(profileId);
+      case 'export': {
+        const res = await dialog.showSaveDialog(w.win, { defaultPath: path.join(app.getPath('documents'), 'Open Arc Passwords.csv'), filters: [{ name: 'CSV', extensions: ['csv'] }] });
+        if (res.canceled || !res.filePath) return false;
+        return p.exportCsv(profileId, res.filePath);
+      }
+    }
+  }
+
   /** The Web Store's Add button: confirm, listing what the extension asks to do. */
   private async confirmInstall(name: string, permissions: string[], w: Win | null): Promise<boolean> {
     const lines = describeExtensionPermissions(permissions);
@@ -1412,7 +1481,11 @@ export class Browser {
     if (state.items !== prev.items) for (const id of this.pipped.keys()) if (!state.items[id]) this.pipped.delete(id);
     if (state.settings.keyOverrides !== prev.settings.keyOverrides) this.buildMenu();
     // Deleting a Profile deletes its browsing data, as the confirmation says.
-    for (const p of prev.profiles) if (!state.profiles.some((x) => x.id === p.id)) void clearProfileData(p.id);
+    for (const p of prev.profiles) {
+      if (state.profiles.some((x) => x.id === p.id)) continue;
+      void clearProfileData(p.id);
+      this.passwords.forget(p.id);
+    }
     // Answers changed in Settings or the site panel settle prompts that are already waiting.
     if (state.settings.sitePermissions !== prev.settings.sitePermissions) setImmediate(() => this.permissions.recheck());
   }

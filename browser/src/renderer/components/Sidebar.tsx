@@ -4,6 +4,7 @@ import { itemTitle, type Item, type Space, type State } from '../../shared/model
 import { isAncestor } from '../../shared/tree';
 import { api, dispatch, faviconFor, hostOf } from '../api';
 import { originOf } from '../../shared/permissions';
+import { PasswordPromptCard } from './Passwords';
 import { DownloadsList, PermissionPromptCard, SitePermissionList, downloadProgress, useDownloads } from './Site';
 import { ExtensionsPanel, PinnedExtensions } from './Extensions';
 
@@ -75,6 +76,7 @@ export function Sidebar(p: Props) {
       <PinnedExtensions state={state} win={win} />
 
       {win.permissionPrompt && <PermissionPromptCard prompt={win.permissionPrompt} />}
+      {win.passwordPrompt && <PasswordPromptCard prompt={win.passwordPrompt} />}
       {panel === 'site' && origin && (
         <div className="sidebar-panel site-panel">
           <header><span className="ellipsis">{hostOf(origin)}</span><button className="icon-btn" onClick={() => setPanel(null)}>×</button></header>

@@ -40,12 +40,20 @@ On first launch it offers to import from Arc. Only the three files `arc-export` 
 | notes-easels-library | Local Markdown Notes, a local canvas for Easels (strokes, text, pasted images), area Captures, Library |
 | keybindings | Defaults from `spec/formats/keybindings.md` (provisional there), user overrides with conflict handling |
 
-Beyond the specs, the usual browser basics: page context menu, downloads, site permissions, private windows, Picture in Picture and a mini player, print, page fullscreen, and Chrome extensions.
+Beyond the specs, the usual browser basics: page context menu, downloads, site permissions, private windows, Picture in Picture and a mini player, print, page fullscreen, Chrome extensions, and saved passwords.
 
 ## Chrome extensions
 
 Extensions install from the Chrome Web Store ("Add to Chrome" asks first, listing what the extension can do). Each Profile has its own set, kept in `<userData>/Extensions/<profile>/`. Library › Extensions turns them off (the folder moves to `Extensions (disabled)/`), removes them, and lists the ones installed in Arc, by name only, to reinstall from the store. Pinned toolbar buttons sit under the address. Private windows run no extensions.
 
 The `chrome.*` APIs come from [`electron-chrome-extensions`](https://www.npmjs.com/package/electron-chrome-extensions) (MIT since 4.10.0) and store installs and updates from [`electron-chrome-web-store`](https://www.npmjs.com/package/electron-chrome-web-store) (MIT). Both stay unbundled in `node_modules` because they locate their own page preloads. Set `OPEN_ARC_NO_EXTENSION_UPDATES=1` to skip update checks (the e2e suite does).
+
+## Saved passwords
+
+Library › Passwords imports a CSV exported from Arc or Chrome (`name,url,username,password,note`), then offers to delete the file. Logins are kept per Profile in `<userData>/passwords-<profile>.bin`, encrypted with the macOS keychain key (`safeStorage`); they never go into `state.json`. Clicking a sign-in field on a site with a saved login shows a menu under it, and picking a login fills it. Only the page's top frame, and only for the same scheme, host and port (`www.` aside). After you sign in, the sidebar offers to save or update the login. Showing, copying or exporting a password asks for Touch ID. Private windows don't fill or save passwords.
+
+## Tests
+
+`npm test` (unit) and `npm run test:e2e` (builds, then runs the Electron suite). The e2e suite runs with `OPEN_ARC_QUIET=1` so it stays out of your way while you work. Windows are invisible, click-through and never focused, and there's no Dock icon. The clipboard is in memory, the keychain is a mock, and downloads stay in the throwaway profile. Picture in Picture uses a stand-in instead of a real floating window (set `OPEN_ARC_E2E_REAL_PIP=1` for the real one).
 
 Not reproduced, per spec: telemetry, cloud sync, AI features, and sharing that depended on Arc's servers.

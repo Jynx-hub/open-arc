@@ -6,6 +6,7 @@ import { api, dispatch, hostOf, uid } from '../api';
 import type { WindowInfo } from '../../shared/ipc';
 import { DownloadsList, SitePermissionList } from './Site';
 import { ExtensionsView } from './Extensions';
+import { PasswordsView } from './Passwords';
 
 const SPACE_COLORS = ['#5b6cff', '#e8590c', '#2f9e44', '#c2255c', '#1098ad', '#7048e8', '#f08c00', '#495057'];
 const THRESHOLD_LABELS: Record<ArchiveThreshold, string> = {
@@ -163,14 +164,14 @@ function SpaceItems({ state, rootId, label, targets }: { state: State; rootId: s
   );
 }
 
-// ── Library: Archive, History, Captures, Notes & Easels ──────────────────────
+// ── Library: Archive, History, Downloads, Captures, Notes & Easels, Passwords, Extensions ──────────────────────
 
 export function Library({ state, win, initialTab, onClose }: { state: State; win: WindowInfo; initialTab?: string; onClose(): void }) {
   const [tab, setTab] = useState(initialTab ?? 'archive');
   return (
     <Modal title="Library" onClose={onClose} wide>
       <nav className="tabs">
-        {[['archive', 'Archive'], ['history', 'History'], ['downloads', 'Downloads'], ['captures', 'Captures'], ['docs', 'Notes & Easels'], ['extensions', 'Extensions']].map(([id, label]) => (
+        {[['archive', 'Archive'], ['history', 'History'], ['downloads', 'Downloads'], ['captures', 'Captures'], ['docs', 'Notes & Easels'], ['passwords', 'Passwords'], ['extensions', 'Extensions']].map(([id, label]) => (
           <button key={id} className={tab === id ? 'on' : ''} onClick={() => setTab(id!)}>{label}</button>
         ))}
       </nav>
@@ -187,6 +188,7 @@ export function Library({ state, win, initialTab, onClose }: { state: State; win
       )}
       {tab === 'captures' && <CapturesView />}
       {tab === 'docs' && <DocsView state={state} onClose={onClose} />}
+      {tab === 'passwords' && <PasswordsView state={state} win={win} />}
       {tab === 'extensions' && <ExtensionsView win={win} onClose={onClose} />}
     </Modal>
   );

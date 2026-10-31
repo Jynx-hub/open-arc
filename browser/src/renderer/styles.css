@@ -246,6 +246,12 @@ kbd { font: 11px ui-monospace, monospace; opacity: 0.8; margin-left: 6px; }
 .sidebar-panel header { display: flex; align-items: center; gap: 6px; font-weight: 600; margin-bottom: 4px; }
 .sidebar-panel header > span { flex: 1; min-width: 0; }
 .sidebar-panel .list { margin: 0; padding: 0; list-style: none; }
+.passwords .notice { display: flex; align-items: center; gap: 6px; background: #f5f4f8; border-radius: 6px; padding: 8px 10px; margin: 0 0 8px; }
+.passwords h4 { margin: 14px 0 4px; font-size: 12px; color: var(--ink-2); }
+.list.logins li { gap: 6px; }
+.login-password { font-size: 12px; color: var(--ink-2); max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.login-fields { display: flex; flex-direction: column; gap: 4px; }
+.empty-passwords p { margin: 4px 0 8px; }
 .downloads-panel { position: absolute; left: 8px; right: 8px; bottom: 40px; z-index: 6; max-height: 60%; overflow-y: auto; }
 .list.downloads li, .site-perms li { display: flex; align-items: center; gap: 4px; padding: 4px 0; }
 .download progress { width: 100%; height: 4px; display: block; margin: 3px 0 1px; accent-color: var(--space); }

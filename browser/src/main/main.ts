@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, protocol, net, session } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, protocol, net, session, type WebContents } from 'electron';
 import { ElectronChromeExtensions, setSessionPartitionResolver } from 'electron-chrome-extensions';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -69,13 +69,15 @@ app.whenReady().then(() => {
   const b = browser;
   b.buildMenu();
 
-  ipcMain.handle('getState', () => b.uiState());
+  // Only the app's own windows talk on these channels; web pages have a preload too (passwords.ts).
+  const fromUi = (e: { sender: WebContents }) => !!b.winFor(e.sender);
+  ipcMain.handle('getState', (e) => (fromUi(e) ? b.uiState() : null));
   ipcMain.handle('getWindow', (e) => {
     const w = b.winFor(e.sender);
     return w ? b.windowInfo(w) : null;
   });
-  ipcMain.handle('getLive', () => b.liveSnapshot());
-  ipcMain.on('dispatch', (_e, action: Action) => store.dispatch(action));
+  ipcMain.handle('getLive', (e) => (fromUi(e) ? b.liveSnapshot() : null));
+  ipcMain.on('dispatch', (e, action: Action) => fromUi(e) && store.dispatch(action));
   ipcMain.handle('command', (e, command: Command) => {
     const w = b.winFor(e.sender);
     return w ? b.command(w, command) : null;
@@ -88,7 +90,7 @@ app.whenReady().then(() => {
     const w = b.winFor(e.sender);
     if (w) b.find(w, text, opts);
   });
-  ipcMain.handle('captures', async () => (await import('./library')).listCaptures());
+  ipcMain.handle('captures', async (e) => (fromUi(e) ? (await import('./library')).listCaptures() : null));
 
   b.createWindow();
   if (store.firstRun) {

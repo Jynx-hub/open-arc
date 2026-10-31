@@ -6,6 +6,7 @@ import { CommandBar, type CommandBarMode } from './components/CommandBar';
 import { ArchiveEducation, BoostEditor, ConfirmDialog, Library, LiveFolderDialog, Settings, SpaceEditor, SpaceManager, Welcome } from './components/Overlays';
 import { EaselView, NoteEditor } from './components/Editors';
 import { PermissionPromptCard } from './components/Site';
+import { PasswordPromptCard } from './components/Passwords';
 import { PrivateSidebar } from './components/PrivateSidebar';
 
 type Overlay =
@@ -58,6 +59,7 @@ export function App({ kind }: { kind: 'main' | 'little' | 'incognito' }) {
         case 'downloads':
         case 'showDownloads': return setOverlay({ name: 'library', tab: 'downloads' });
         case 'extensions': return setOverlay({ name: 'library', tab: 'extensions' });
+        case 'passwords': return setOverlay({ name: 'library', tab: 'passwords' });
         case 'settings': return setOverlay({ name: 'settings' });
         case 'linkRules': return setOverlay({ name: 'settings', tab: 'links' });
         case 'newSpace': return setOverlay({ name: 'editSpace' });
@@ -104,7 +106,7 @@ export function App({ kind }: { kind: 'main' | 'little' | 'incognito' }) {
       ro.disconnect();
       window.removeEventListener('resize', report);
     };
-  }, [state === null, win?.sidebarHidden, findOpen, kind, !!win?.permissionPrompt]);
+  }, [state === null, win?.sidebarHidden, findOpen, kind, !!win?.permissionPrompt, !!win?.passwordPrompt]);
 
   if (!state || !win) return <div className="loading" />;
   const space = state.spaces.find((s) => s.id === win.spaceId) ?? state.spaces[0]!;
@@ -153,6 +155,7 @@ export function App({ kind }: { kind: 'main' | 'little' | 'incognito' }) {
         {kind === 'little' && <LittleBar state={state} url={win.little?.url ?? ''} title={win.little?.title ?? ''} onEdit={() => openCommandBar('current')} />}
         {kind !== 'little' && win.sidebarHidden && <div className="hidden-sidebar-strip" onMouseEnter={() => api.command({ type: 'runAction', id: 'toggleSidebar' })} />}
         {win.permissionPrompt && (kind === 'little' || win.sidebarHidden) && <PermissionPromptCard prompt={win.permissionPrompt} bar />}
+        {win.passwordPrompt && (kind === 'little' || win.sidebarHidden) && <PasswordPromptCard prompt={win.passwordPrompt} bar />}
         {findOpen && <FindBar onClose={() => { setFindOpen(false); void api.find(''); }} />}
         <div className="viewport" ref={viewport}>
           {win.snapshots?.map((s, i) => (

@@ -2,6 +2,7 @@
 import type { Action } from './reducer';
 import type { State } from './model';
 import type { ArcExtension, ExtensionInfo } from './extensions';
+import type { LoginSummary } from './passwords';
 
 export interface LiveTab {
   url: string;
@@ -56,6 +57,8 @@ export interface WindowInfo {
   zoom: number;
   /** A site asking for a permission in the page this window shows. One at a time; others wait. */
   permissionPrompt: PermissionPrompt | null;
+  /** Offer to save the login a page just sent (never the password itself). */
+  passwordPrompt: PasswordPrompt | null;
   /** Private window: its tabs, which are not sidebar items. */
   private: { tabs: PrivateTab[]; selectedId: string | null; partition: string } | null;
   /** Session partition whose extensions this window shows; null in a private window (no extensions there). */
@@ -70,6 +73,42 @@ export interface PermissionPrompt {
   /** Keys from shared/permissions.ts PROMPTED (camera, geolocation, …). */
   keys: string[];
 }
+
+export interface PasswordPrompt {
+  id: string;
+  origin: string;
+  username: string;
+  kind: 'save' | 'update';
+}
+
+/** Library › Passwords for one Profile. */
+export interface PasswordList {
+  logins: LoginSummary[];
+  never: string[];
+  /** False when saving is impossible (no keychain, or a file this Mac can't decrypt). */
+  available: boolean;
+}
+
+export interface PasswordImport {
+  added: number;
+  updated: number;
+  unchanged: number;
+  skipped: number;
+  file: string;
+}
+
+/** Library › Passwords, on the window's Profile. Only `reveal` ever returns a password. */
+export type PasswordOp =
+  | { op: 'list' }
+  | { op: 'reveal'; id: string }
+  | { op: 'copy'; id: string }
+  | { op: 'update'; id: string; username: string; password?: string; note: string }
+  | { op: 'remove'; id: string }
+  | { op: 'unblock'; origin: string }
+  /** Without `file`, asks for one. Returns PasswordImport, or { error }. */
+  | { op: 'import'; file?: string }
+  | { op: 'deleteImported' }
+  | { op: 'export' };
 
 export type DownloadOp = 'open' | 'show' | 'cancel' | 'pause' | 'resume' | 'retry' | 'remove';
 
@@ -100,6 +139,8 @@ export type Command =
   | { type: 'liveFolderRefresh'; id: string }
   | { type: 'download'; op: DownloadOp; id: string }
   | { type: 'permission'; id: string; answer: 'allow' | 'once' | 'block' }
+  | { type: 'passwordPrompt'; id: string; answer: 'save' | 'never' | 'dismiss' }
+  | ({ type: 'passwords' } & PasswordOp)
   | { type: 'media'; id: string; op: 'playPause' | 'mute' }
   /** Extensions of this window's Profile. Returns ExtensionInfo[]. */
   | { type: 'extensions' }
@@ -136,6 +177,8 @@ export interface UiEvents {
   downloadProgress: Record<string, { receivedBytes: number; totalBytes: number }>;
   /** This window's Profile's extensions, after an install, removal, or enable/disable. */
   extensions: ExtensionInfo[];
+  /** This window's Profile's saved logins changed. */
+  passwords: null;
 }
 
 export type { ArcExtension, ExtensionInfo };
