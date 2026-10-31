@@ -11,6 +11,18 @@ export async function launch(env: Record<string, string> = {}, prepare?: (userDa
     args: [path.resolve(__dirname, '..')],
     env: { ...process.env, OPEN_ARC_USER_DATA: userData, OPEN_ARC_FIRESTORE_DIR: path.join(userData, 'no-firestore'), OPEN_ARC_QUIET: '1', OPEN_ARC_NO_EXTENSION_UPDATES: '1', ...env } as Record<string, string>,
   });
+  // The system clipboard is the user's: copies in a test go to an in-memory one.
+  await app.evaluate(({ clipboard }) => {
+    let text = '';
+    let items: unknown[] = [];
+    Object.assign(clipboard, {
+      writeText: (t: string) => void (text = t),
+      readText: () => text,
+      write: async (i: unknown[]) => void (items = i),
+      clear: () => void ((text = ''), (items = [])),
+    });
+    (globalThis as any).clipboardItems = () => items;
+  });
   const ui = await app.firstWindow();
   await ui.waitForSelector('.sidebar');
   return { app, ui, userData };
